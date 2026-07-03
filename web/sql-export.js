@@ -12,14 +12,43 @@ function parseAmount(value) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function parseIsoDate(isoDate) {
+  if (!isoDate) return null;
+  const str = String(isoDate).slice(0, 10);
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function formatLocalTimestamp(value) {
+  if (value instanceof Date) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    const h = String(value.getHours()).padStart(2, "0");
+    const min = String(value.getMinutes()).padStart(2, "0");
+    const s = String(value.getSeconds()).padStart(2, "0");
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+  const str = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str.slice(0, 10))) return `${str.slice(0, 10)} 00:00:00`;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str)) return formatLocalTimestamp(new Date(str));
+  if (/^\d{4}-\d{2}-\d{2} /.test(str)) return str.slice(0, 19);
+  return str;
+}
+
+function sqlTimestampLiteral(value) {
+  if (value === null || value === undefined || value === "") return "NULL";
+  return `'${formatLocalTimestamp(value).replace(/'/g, "''")}'`;
+}
+
 function sqlLiteral(value) {
   if (value === null || value === undefined) return "NULL";
   if (value === "") return "''";
   if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  if (value instanceof Date) return `'${value.toISOString().replace(/'/g, "''")}'`;
+  if (value instanceof Date) return sqlTimestampLiteral(value);
   const str = String(value);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return `'${str}'`;
   return `'${str.replace(/'/g, "''")}'`;
 }
 
@@ -96,8 +125,8 @@ function invoiceToSqlStatements(invoice, dataVersion = 1) {
   ${sqlLiteral(customer.country || "Česká republika")},
   ${sqlLiteral(customer.ico || "")},
   ${sqlLiteral(customer.dic || "")},
-  ${dates.issue ? sqlLiteral(dates.issue) : "NULL"},
-  ${dates.due ? sqlLiteral(dates.due) : "NULL"},
+  ${sqlTimestampLiteral(dates.issue)},
+  ${sqlTimestampLiteral(dates.due)},
   ${sqlLiteral(dates.orderNumber || "")},
   ${sqlLiteral(payment.accountNumber || "")},
   ${sqlLiteral(payment.iban || "")},
@@ -105,9 +134,9 @@ function invoiceToSqlStatements(invoice, dataVersion = 1) {
   ${sqlLiteral(payment.variableSymbol || "")},
   ${sqlLiteral(payment.constantSymbol || "")},
   ${sqlLiteral(payment.method || "Převodem")},
-  ${sqlLiteral(createdAt)},
-  ${sqlLiteral(now)},
-  ${sqlLiteral(now)}
+  ${sqlTimestampLiteral(createdAt)},
+  ${sqlTimestampLiteral(now)},
+  ${sqlTimestampLiteral(now)}
 ) ON CONFLICT (id) DO UPDATE SET ${INVOICE_UPDATE_SET};`
   );
 

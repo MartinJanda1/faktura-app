@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     customer_dic            VARCHAR(20)  NOT NULL DEFAULT '',
 
     -- Datumy (dates)
-    issue_date              DATE,
-    due_date                DATE,
+    issue_date              TIMESTAMP WITHOUT TIME ZONE,
+    due_date                TIMESTAMP WITHOUT TIME ZONE,
     order_number            VARCHAR(100) NOT NULL DEFAULT '',
 
     -- Platba (payment)
@@ -38,9 +38,9 @@ CREATE TABLE IF NOT EXISTS invoices (
     payment_constant_symbol VARCHAR(10)  NOT NULL DEFAULT '',
     payment_method          VARCHAR(50)  NOT NULL DEFAULT 'Převodem',
 
-    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    saved_at                TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    created_at              TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    saved_at                TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    updated_at              TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
 
     CONSTRAINT invoices_invoice_number_unique UNIQUE (invoice_number),
     CONSTRAINT invoices_data_version_positive CHECK (data_version >= 1)
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS templates (
     payment_constant_symbol VARCHAR(10)  NOT NULL DEFAULT '',
     payment_method          VARCHAR(50)  NOT NULL DEFAULT 'Převodem',
 
-    saved_at                TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    saved_at                TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
 
     CONSTRAINT templates_singleton CHECK (id = 1),
     CONSTRAINT templates_data_version_positive CHECK (data_version >= 1)

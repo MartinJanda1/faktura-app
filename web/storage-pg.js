@@ -1,7 +1,7 @@
 const { Pool } = require("pg");
 const { getPgConfig } = require("./env-loader");
 const { validateImportSql } = require("./sql-export");
-const { safeId, parseAmount, formatAmount, formatDate, toIsoString } = require("./storage-utils");
+const { safeId, parseAmount, formatAmount, formatDate, toIsoString, isoDateToTimestamp, toLocalTimestamp } = require("./storage-utils");
 
 const TEMPLATE_ID = 1;
 
@@ -217,7 +217,7 @@ function createPgStorage({ dataVersion }) {
           $1, $2, $3, $4, $5,
           $6, $7, $8, $9, $10, $11, $12,
           $13, $14, $15, $16, $17, $18,
-          NULLIF($19, '')::date, NULLIF($20, '')::date, $21,
+          $19, $20, $21,
           $22, $23, $24, $25, $26, $27,
           $28, $29, $30
         )
@@ -269,8 +269,8 @@ function createPgStorage({ dataVersion }) {
           customer.country || "Česká republika",
           customer.ico || "",
           customer.dic || "",
-          dates.issue || null,
-          dates.due || null,
+          isoDateToTimestamp(dates.issue),
+          isoDateToTimestamp(dates.due),
           dates.orderNumber || "",
           payment.accountNumber || "",
           payment.iban || "",
@@ -278,9 +278,9 @@ function createPgStorage({ dataVersion }) {
           payment.variableSymbol || "",
           payment.constantSymbol || "",
           payment.method || "Převodem",
-          createdAt,
-          now,
-          now,
+          toLocalTimestamp(createdAt),
+          toLocalTimestamp(now),
+          toLocalTimestamp(now),
         ]
       );
 
