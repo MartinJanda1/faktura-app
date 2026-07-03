@@ -8,6 +8,7 @@
     "build:css": "npm --prefix web run build:css",
     "watch:css": "npm --prefix web run watch:css",
     "dist:desktop": "npm --prefix desktop run dist",
-    "dist:desktop:installer": "npm --prefix desktop run dist:installer"
+    "dist:desktop:installer": "npm --prefix desktop run dist:installer",
+    "db:migrate": "npm install --prefix pg-scripts && npm --prefix pg-scripts run migrate"
   }
 }

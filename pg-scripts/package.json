@@ -1,0 +1,12 @@
+{
+  "name": "faktura-pg-scripts",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "migrate": "node run-migrations.js"
+  },
+  "dependencies": {
+    "faktura-app": "file:..",
+    "pg": "^8.16.0"
+  }
+}

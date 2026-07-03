@@ -1,9 +1,14 @@
 node_modules/
 web/node_modules/
 desktop/node_modules/
+pg-scripts/node_modules/
 desktop/dist/
+
+pg-scripts/.env
 
 web/data/invoices/*.json
 web/data/sablona.json
 desktop/data/invoices/*.json
 desktop/data/sablona.json
+
+.env
