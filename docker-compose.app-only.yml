@@ -9,20 +9,20 @@
 #      docker network connect <síť_postgres> faktura-app
 
 services:
-  faktura:
-    build: .
-    container_name: faktura-app
-    restart: unless-stopped
-    ports:
-      - "${APP_PORT:-3000}:3000"
-    environment:
-      CONNECTION_TO_PG: "true"
-      PG_HOST: ${PG_HOST:-postgres-1}
-      PGPORT: ${PGPORT:-5432}
-      PG_DATABASE: ${PG_DATABASE:-fakturaApp}
-      PG_USER: ${PG_USER:-cbos}
-      PG_PASSWORD: ${PG_PASSWORD:-cbos}
-      PORT: "3000"
-      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    faktura:
+        build: .
+        container_name: faktura-app
+        restart: unless-stopped
+        ports:
+            - '${APP_PORT:-3000}:3000'
+        environment:
+            CONNECTION_TO_PG: 'true'
+            PG_HOST: ${PG_HOST:-postgres-1}
+            PG_PORT: ${PG_PORT:-5432}
+            PG_DATABASE: ${PG_DATABASE:-fakturaApp}
+            PG_USER: ${PG_USER:-cbos}
+            PG_PASSWORD: ${PG_PASSWORD:-cbos}
+            PORT: '3000'
+            RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'

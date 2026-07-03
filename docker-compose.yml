@@ -37,7 +37,7 @@ services:
         environment:
             CONNECTION_TO_PG: 'true'
             PG_HOST: postgres
-            PGPORT: '5432'
+            PG_PORT: '5432'
             PG_DATABASE: ${PG_DATABASE:-fakturaApp}
             PG_USER: ${PG_USER:-cbos}
             PG_PASSWORD: ${PG_PASSWORD:-cbos}
