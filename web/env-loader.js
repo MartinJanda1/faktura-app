@@ -45,7 +45,7 @@ function getPgConfig() {
   const database = process.env.PG_DATABASE || process.env.PGDATABASE;
   const user = process.env.PG_USER || process.env.PGUSER;
   const password = process.env.PG_PASSWORD || process.env.PGPASSWORD;
-  const port = Number(process.env.PGPORT || 5432);
+  const port = Number(process.env.PGPORT || process.env.PG_PORT || 5432);
 
   if (!host || !database || !user || password === undefined) {
     throw new Error(

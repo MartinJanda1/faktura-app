@@ -1,0 +1,28 @@
+# Pouze aplikace — připojení k existujícímu PostgreSQL na NAS (např. postgres-1)
+#
+# 1. Zjisti Docker síť postgres kontejneru (Container Station → postgres-1 → Síť)
+# 2. Uprav PG_HOST níže na název kontejneru (např. postgres-1)
+# 3. Spusť:
+#      docker compose -f docker-compose.app-only.yml up -d --build
+#
+# Nebo připoj oba kontejnery do stejné sítě:
+#      docker network connect <síť_postgres> faktura-app
+
+services:
+  faktura:
+    build: .
+    container_name: faktura-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      CONNECTION_TO_PG: "true"
+      PG_HOST: ${PG_HOST:-postgres-1}
+      PGPORT: ${PGPORT:-5432}
+      PG_DATABASE: ${PG_DATABASE:-fakturaApp}
+      PG_USER: ${PG_USER:-cbos}
+      PG_PASSWORD: ${PG_PASSWORD:-cbos}
+      PORT: "3000"
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

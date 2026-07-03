@@ -1,0 +1,11 @@
+node_modules
+web/node_modules
+desktop/node_modules
+pg-scripts/node_modules
+desktop/dist
+.git
+.env
+*.md
+web/data/invoices
+web/data/sablona.json
+desktop/data
