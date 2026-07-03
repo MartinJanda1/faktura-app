@@ -1,5 +1,6 @@
 const { Pool } = require("pg");
 const { getPgConfig } = require("./env-loader");
+const { validateImportSql } = require("./sql-export");
 const { safeId, parseAmount, formatAmount, formatDate, toIsoString } = require("./storage-utils");
 
 const TEMPLATE_ID = 1;
@@ -454,6 +455,30 @@ function createPgStorage({ dataVersion }) {
     }
   }
 
+  async function importSqlScript(sql) {
+    const statements = validateImportSql(sql);
+    const client = await pool.connect();
+    let importedCount = 0;
+
+    try {
+      await client.query("BEGIN");
+      for (const stmt of statements) {
+        const upper = stmt.trim().toUpperCase();
+        if (upper === "BEGIN" || upper === "COMMIT" || upper === "ROLLBACK") continue;
+        if (/^INSERT INTO INVOICES\b/.test(upper)) importedCount += 1;
+        await client.query(stmt);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    return { importedCount };
+  }
+
   return {
     kind: "postgres",
     async ensureReady() {
@@ -486,6 +511,7 @@ function createPgStorage({ dataVersion }) {
     readTemplate,
     saveTemplateRecord,
     deleteTemplateRecord,
+    importSqlScript,
   };
 }
 

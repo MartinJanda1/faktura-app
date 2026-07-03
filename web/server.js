@@ -160,6 +160,17 @@ function createFakturaServer(options = {}) {
         return;
       }
 
+      if (parts[1] === "import" && parts[2] === "sql" && req.method === "POST") {
+        if (storage.kind !== "postgres" || !storage.importSqlScript) {
+          sendError(res, 400, "SQL import je dostupný jen v režimu PostgreSQL.");
+          return;
+        }
+        const body = await parseBody(req);
+        const result = await storage.importSqlScript(body?.sql || "");
+        sendJson(res, 200, result);
+        return;
+      }
+
       sendError(res, 404, "Endpoint nenalezen.");
     } catch (err) {
       const status = err.code === "ENOENT" ? 404 : 400;

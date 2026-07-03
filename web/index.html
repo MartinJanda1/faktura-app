@@ -29,7 +29,7 @@
             <svg class="theme-icon-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
           </span>
         </button>
-        <label class="btn-secondary cursor-pointer">
+        <label id="import-label" class="btn-secondary cursor-pointer">
           Importovat .json
           <input type="file" id="import-file" accept=".json,application/json,.txt,text/plain" class="hidden" />
         </label>
@@ -236,7 +236,7 @@
       <div class="relative w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
         <button type="button" id="export-modal-close" class="modal-close" title="Zavřít" aria-label="Zavřít">&times;</button>
         <h2 id="export-modal-title" class="mb-1 text-base font-bold text-neutral-900">Export faktur</h2>
-        <p class="mb-5 text-sm text-neutral-600">Vyber filtry — exportují se jen odpovídající faktury do jednoho .json souboru.</p>
+        <p id="export-modal-desc" class="mb-5 text-sm text-neutral-600">Vyber filtry — exportují se jen odpovídající faktury do jednoho .json souboru.</p>
 
         <div class="rounded-lg border border-neutral-200 bg-neutral-50/80 p-4">
           <div class="flex flex-wrap items-end gap-x-4 gap-y-3">
@@ -298,6 +298,7 @@
 
   <div id="toast" class="pointer-events-none fixed bottom-6 right-6 z-50 hidden rounded-lg bg-neutral-800 px-4 py-3 text-sm text-white shadow-lg"></div>
 
+  <script src="sql-export.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/invoice-model.js"></script>
   <script src="js/invoice-filters.js"></script>

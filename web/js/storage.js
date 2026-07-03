@@ -116,8 +116,8 @@ const FakturaStorage = (() => {
     return JSON.stringify(payload, null, 2);
   }
 
-  function downloadJson(filename, content) {
-    const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+  function downloadText(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -136,7 +136,31 @@ const FakturaStorage = (() => {
       invoices.length === 1
         ? `faktura-${sanitizeFilename(invoices[0].invoiceNumber)}.json`
         : `faktury-export-${new Date().toISOString().slice(0, 10)}.json`;
-    downloadJson(filename, invoicesToJsonContent(invoices));
+    downloadText(filename, invoicesToJsonContent(invoices), "application/json;charset=utf-8");
+  }
+
+  async function downloadInvoicesExport(invoices) {
+    if (!invoices?.length) return;
+    const status = await loadStorageStatus();
+
+    if (status.storage === "postgres") {
+      if (!window.FakturaSql) {
+        throw new StorageError("SQL export modul není načten.");
+      }
+      const sql = window.FakturaSql.invoicesToSqlScript(invoices, DATA_VERSION);
+      const filename =
+        invoices.length === 1
+          ? `faktura-${sanitizeFilename(invoices[0].invoiceNumber)}.sql`
+          : `faktury-export-${new Date().toISOString().slice(0, 10)}.sql`;
+      downloadText(filename, sql, "application/sql;charset=utf-8");
+      return;
+    }
+
+    downloadInvoicesJson(invoices);
+  }
+
+  async function downloadInvoiceExport(invoice) {
+    return downloadInvoicesExport([invoice]);
   }
 
   function parseInvoicesFromJson(text) {
@@ -160,6 +184,19 @@ const FakturaStorage = (() => {
 
   async function importInvoicesFromFile(file) {
     const text = await file.text();
+    const status = await loadStorageStatus();
+    const isSql =
+      file.name.toLowerCase().endsWith(".sql") ||
+      text.trim().startsWith("-- Faktura-app SQL");
+
+    if (status.storage === "postgres" && isSql) {
+      const result = await apiFetch("/import/sql", {
+        method: "POST",
+        body: JSON.stringify({ sql: text }),
+      });
+      return { count: result?.importedCount || 0 };
+    }
+
     const invoices = parseInvoicesFromJson(text);
     const saved = [];
 
@@ -169,12 +206,12 @@ const FakturaStorage = (() => {
       saved.push(await saveInvoice(record));
     }
 
-    return saved;
+    return { count: saved.length, saved };
   }
 
   async function importInvoiceFromFile(file) {
-    const saved = await importInvoicesFromFile(file);
-    return saved[0];
+    const result = await importInvoicesFromFile(file);
+    return result.saved?.[0] || null;
   }
 
   let storageStatus = null;
@@ -218,7 +255,9 @@ const FakturaStorage = (() => {
     hasTemplate,
     downloadInvoiceJson,
     downloadInvoicesJson,
-    downloadJson,
+    downloadInvoiceExport,
+    downloadInvoicesExport,
+    downloadJson: downloadText,
     importInvoiceFromFile,
     importInvoicesFromFile,
     parseJsonContent,

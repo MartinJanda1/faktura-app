@@ -9,6 +9,8 @@ let visibleIds = [];
 
 const SORT_COLUMNS = ["number", "customer", "issue", "total"];
 
+let exportFileExt = "json";
+
 async function updateStorageHint() {
   const el = document.getElementById("storage-hint");
   if (!el) return;
@@ -18,6 +20,46 @@ async function updateStorageHint() {
   } else {
     el.innerHTML = 'Faktury se ukládají do složky <code class="text-xs">data/invoices/</code>';
   }
+  await updateExportImportUi(status);
+}
+
+async function updateExportImportUi(status) {
+  const resolved = status || (await FakturaStorage.getStorageStatus());
+  const isPg = resolved.storage === "postgres";
+  exportFileExt = isPg ? "sql" : "json";
+
+  const importLabel = document.getElementById("import-label");
+  if (importLabel) {
+    const textNode = [...importLabel.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
+    if (textNode) {
+      textNode.textContent = isPg ? "Importovat (.sql / .json) " : "Importovat .json ";
+    }
+  }
+
+  const importInput = document.getElementById("import-file");
+  if (importInput) {
+    importInput.accept = isPg
+      ? ".sql,.json,application/json,application/sql,text/plain"
+      : ".json,application/json,.txt,text/plain";
+  }
+
+  const exportConfirm = document.getElementById("export-modal-confirm");
+  if (exportConfirm) {
+    exportConfirm.textContent = isPg ? "Exportovat .sql" : "Exportovat .json";
+  }
+
+  const exportDesc = document.getElementById("export-modal-desc");
+  if (exportDesc) {
+    exportDesc.textContent = isPg
+      ? "Vyber filtry — exportují se jen odpovídající faktury do jednoho .sql souboru (INSERT skript)."
+      : "Vyber filtry — exportují se jen odpovídající faktury do jednoho .json souboru.";
+  }
+
+  document.querySelectorAll(".btn-download").forEach((btn) => {
+    const label = `Exportovat .${exportFileExt}`;
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+  });
 }
 
 async function deletedInvoicesMessage(count) {
@@ -358,13 +400,19 @@ function confirmExport() {
   const invoices = exportFilters.getFiltered();
   if (!invoices.length) return;
 
-  FakturaStorage.downloadInvoicesJson(invoices);
-  showToast(
-    invoices.length === 1
-      ? "Faktura exportována do .json souboru."
-      : `${invoices.length} faktur exportováno do jednoho .json souboru.`
-  );
-  closeExportModal();
+  FakturaStorage.downloadInvoicesExport(invoices)
+    .then(async () => {
+      const ext = exportFileExt;
+      showToast(
+        invoices.length === 1
+          ? `Faktura exportována do .${ext} souboru.`
+          : `${invoices.length} faktur exportováno do jednoho .${ext} souboru.`
+      );
+      closeExportModal();
+    })
+    .catch((err) => {
+      alert(err.message || "Export se nezdařil.");
+    });
 }
 
 function sortInvoices(invoices) {
@@ -477,7 +525,7 @@ function renderInvoiceRows() {
               <a href="invoice.html?id=${encodeURIComponent(summary.id)}" class="btn-icon" title="Otevřít" aria-label="Otevřít fakturu">
                 <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.379-8.379-2.828-2.828z"/></svg>
               </a>
-              <button type="button" class="btn-icon btn-download" data-id="${summary.id}" title="Exportovat .json" aria-label="Exportovat .json">
+              <button type="button" class="btn-icon btn-download" data-id="${summary.id}" title="Exportovat .${exportFileExt}" aria-label="Exportovat .${exportFileExt}">
                 <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 3a1 1 0 011 1v6.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 10.586V4a1 1 0 011-1z"/><path d="M4 14a1 1 0 011 1v1h10v-1a1 1 0 112 0v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1a1 1 0 011-1z"/></svg>
               </button>
               <button type="button" class="btn-icon btn-resolve ${summary.resolved ? "btn-icon-resolved" : ""}" data-id="${summary.id}" data-resolved="${summary.resolved ? "1" : "0"}" title="${summary.resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}" aria-label="${summary.resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}">
@@ -855,8 +903,8 @@ function initListActions() {
     if (downloadBtn) {
       try {
         const invoice = await FakturaStorage.getInvoice(downloadBtn.dataset.id);
-        FakturaStorage.downloadInvoiceJson(invoice);
-        showToast("Kopie faktury exportována.");
+        await FakturaStorage.downloadInvoiceExport(invoice);
+        showToast(`Kopie faktury exportována (.${exportFileExt}).`);
       } catch (err) {
         alert(err.message || "Export se nezdařil.");
       }
@@ -930,8 +978,8 @@ function initImport() {
     if (!file) return;
 
     try {
-      const saved = await FakturaStorage.importInvoicesFromFile(file);
-      showToast(await importedInvoicesMessage(saved.length));
+      const result = await FakturaStorage.importInvoicesFromFile(file);
+      showToast(await importedInvoicesMessage(result.count));
       await renderInvoiceList();
     } catch (err) {
       alert(err.message || "Import se nezdařil.");
