@@ -9,6 +9,41 @@ let visibleIds = [];
 
 const SORT_COLUMNS = ["number", "customer", "issue", "total"];
 
+async function updateStorageHint() {
+  const el = document.getElementById("storage-hint");
+  if (!el) return;
+  const status = await FakturaStorage.getStorageStatus();
+  if (status.storage === "postgres") {
+    el.innerHTML = `Faktury se ukládají do <code class="text-xs">PostgreSQL (${escapeHtml(status.database || "DB")})</code>`;
+  } else {
+    el.innerHTML = 'Faktury se ukládají do složky <code class="text-xs">data/invoices/</code>';
+  }
+}
+
+async function deletedInvoicesMessage(count) {
+  const status = await FakturaStorage.getStorageStatus();
+  if (status.storage === "postgres") {
+    return count === 1
+      ? "1 faktura smazána z databáze."
+      : `${count} faktur smazáno z databáze.`;
+  }
+  return count === 1
+    ? "1 faktura smazána ze složky data/invoices."
+    : `${count} faktur smazáno ze složky data/invoices.`;
+}
+
+async function importedInvoicesMessage(count) {
+  const status = await FakturaStorage.getStorageStatus();
+  if (status.storage === "postgres") {
+    return count === 1
+      ? "1 faktura importována do databáze."
+      : `${count} faktur importováno do databáze.`;
+  }
+  return count === 1
+    ? "1 faktura importována do data/invoices."
+    : `${count} faktur importováno do data/invoices.`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -561,7 +596,7 @@ async function confirmDelete() {
 
   try {
     await FakturaStorage.deleteInvoice(invoicePendingDelete.id);
-    showToast("Faktura smazána ze složky data/invoices.");
+    showToast(await deletedInvoicesMessage(1));
     await renderInvoiceList();
   } catch (err) {
     alert(err.message || "Smazání se nezdařilo.");
@@ -615,11 +650,7 @@ async function confirmBulkDelete() {
 
   const deletedCount = ids.length - failed.length;
   if (deletedCount > 0) {
-    showToast(
-      deletedCount === 1
-        ? "1 faktura smazána ze složky data/invoices."
-        : `${deletedCount} faktur smazáno ze složky data/invoices.`
-    );
+    showToast(await deletedInvoicesMessage(deletedCount));
   }
   if (failed.length) {
     alert(`Některé faktury se nepodařilo smazat (${failed.length}).`);
@@ -900,11 +931,7 @@ function initImport() {
 
     try {
       const saved = await FakturaStorage.importInvoicesFromFile(file);
-      showToast(
-        saved.length === 1
-          ? "1 faktura importována do data/invoices."
-          : `${saved.length} faktur importováno do data/invoices.`
-      );
+      showToast(await importedInvoicesMessage(saved.length));
       await renderInvoiceList();
     } catch (err) {
       alert(err.message || "Import se nezdařil.");
@@ -983,6 +1010,8 @@ async function init() {
   initModals();
   initListActions();
   initImport();
+  await FakturaStorage.loadStorageStatus();
+  await updateStorageHint();
   await renderInvoiceList();
 }
 

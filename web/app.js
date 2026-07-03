@@ -462,9 +462,10 @@ async function saveInvoice() {
   data.resolved = root?.dataset.resolved === "1";
 
   FakturaStorage.saveInvoice(data)
-    .then((saved) => {
+    .then(async (saved) => {
       root.dataset.invoiceId = saved.id;
-      showToast(`Faktura uložena do data/invoices/${saved.id}.json`);
+      const location = await FakturaStorage.getSaveLocationLabel();
+      showToast(`Faktura uložena (${location})`);
       document.title = `Faktura ${saved.invoiceNumber || saved.id} – editor`;
     })
     .catch((err) => {
@@ -559,7 +560,12 @@ async function confirmSaveTemplate() {
   try {
     await FakturaStorage.saveTemplate(template);
     closeTemplateSaveModal();
-    showToast("Šablona uložena do data/sablona.json");
+    const location = await FakturaStorage.getSaveLocationLabel();
+    showToast(
+      (await FakturaStorage.getStorageStatus()).storage === "postgres"
+        ? `Šablona uložena (${location})`
+        : "Šablona uložena do data/sablona.json"
+    );
   } catch (err) {
     alert(err.message || "Uložení šablony se nezdařilo.");
   } finally {

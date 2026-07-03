@@ -177,8 +177,32 @@ const FakturaStorage = (() => {
     return saved[0];
   }
 
+  let storageStatus = null;
+
+  async function loadStorageStatus() {
+    if (storageStatus) return storageStatus;
+    try {
+      storageStatus = await apiFetch("/status");
+    } catch {
+      storageStatus = { storage: "json", description: "JSON soubory" };
+    }
+    return storageStatus;
+  }
+
+  async function getStorageStatus() {
+    return loadStorageStatus();
+  }
+
   function getInvoiceFileLabel(invoice) {
+    if (storageStatus?.storage === "postgres") {
+      return `PostgreSQL · ${invoice.id}`;
+    }
     return `${invoice.id}.json`;
+  }
+
+  async function getSaveLocationLabel() {
+    const status = await loadStorageStatus();
+    return status.storage === "postgres" ? status.description : "data/invoices/";
   }
 
   return {
@@ -200,5 +224,8 @@ const FakturaStorage = (() => {
     parseJsonContent,
     parseInvoicesFromJson,
     getInvoiceFileLabel,
+    getStorageStatus,
+    getSaveLocationLabel,
+    loadStorageStatus,
   };
 })();
