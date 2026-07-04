@@ -429,9 +429,14 @@ function base64ToPdfBlob(base64) {
   return new Blob([bytes], { type: "application/pdf" });
 }
 
-async function exportPdfViaDesktop(filename) {
-  const base64 = await window.mjFakturaDesktop.exportInvoicePdf();
-  downloadPdfBlob(filename, base64ToPdfBlob(base64));
+async function exportPdfViaDesktop(filename, invoice) {
+  try {
+    const base64 = await window.mjFakturaDesktop.exportInvoicePdf();
+    downloadPdfBlob(filename, base64ToPdfBlob(base64));
+  } catch (err) {
+    console.warn("Desktop PDF selhalo, použit canvas export:", err);
+    await exportPdfViaCanvas(invoice, filename);
+  }
 }
 
 function exportPdfViaCanvas(invoice, filename) {
@@ -478,7 +483,7 @@ function downloadPdf() {
   const useDesktopPdf = window.mjFakturaDesktop?.exportInvoicePdf;
 
   const exportPromise = useDesktopPdf
-    ? exportPdfViaDesktop(filename)
+    ? exportPdfViaDesktop(filename, invoice)
     : exportPdfViaCanvas(invoice, filename);
 
   exportPromise
