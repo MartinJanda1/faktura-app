@@ -206,6 +206,19 @@
         @apply border border-[#b0b0b0] bg-[#ececec];
     }
 
+    .pdf-exporting #invoice,
+    .pdf-exporting #invoice * {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: geometricPrecision;
+    }
+
+    .pdf-exporting #invoice input,
+    .pdf-exporting #invoice select,
+    .pdf-exporting #invoice textarea {
+        color: #171717 !important;
+    }
+
     .pdf-date-replacement {
         @apply font-bold;
     }
@@ -407,6 +420,10 @@
     }
 }
 
+.pdf-print-footer {
+    display: none;
+}
+
 @media print {
     body {
         @apply bg-white p-0;
@@ -430,6 +447,60 @@
         border-bottom-width: 0 !important;
         padding-bottom: 0 !important;
         background-color: transparent !important;
+    }
+
+    #invoice,
+    #invoice * {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: geometricPrecision;
+    }
+
+    .pdf-exporting .payment-bar,
+    .pdf-exporting .recap-bar {
+        background-color: #00b5c8 !important;
+    }
+
+    .pdf-exporting .payment-bar,
+    .pdf-exporting .payment-bar *,
+    .pdf-exporting .recap-bar,
+    .pdf-exporting .recap-bar * {
+        color: #ffffff !important;
+    }
+
+    .pdf-exporting #invoice.layout-idoklad .payment-bar,
+    .pdf-exporting #invoice.layout-idoklad .recap-bar {
+        background-color: #ffffff !important;
+        color: #171717 !important;
+    }
+
+    .pdf-exporting #invoice.layout-idoklad .payment-bar *,
+    .pdf-exporting #invoice.layout-idoklad .recap-bar * {
+        color: #171717 !important;
+    }
+
+    .pdf-print-footer {
+        display: block;
+        position: fixed;
+        left: 6mm;
+        right: 6mm;
+        bottom: 3mm;
+        border-top: 0.2mm solid #d2d2d2;
+        padding-top: 1.5mm;
+        font-size: 9pt;
+        line-height: 1.2;
+        color: #5a5a5a;
+    }
+
+    .pdf-print-footer-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8mm;
+    }
+
+    .pdf-print-footer-page::after {
+        content: "Strana " counter(page) " / " counter(pages);
     }
 }
 

@@ -228,15 +228,60 @@ function bindRowEvents(row) {
   }
 }
 
-function replaceInputWithSpan(input) {
+function replaceInputWithSpan(input, text) {
   const span = document.createElement("span");
   span.className = "pdf-text-replacement";
-  span.textContent = input.value;
+  span.textContent = text ?? input.value ?? "";
   span.dataset.for = input.id || `input-${Math.random().toString(36).slice(2)}`;
   if (!input.id) input.id = span.dataset.for;
   input.style.display = "none";
   input.insertAdjacentElement("afterend", span);
   return span;
+}
+
+function controlTextForPdf(el) {
+  if (el.tagName === "SELECT") return el.value;
+  if (el.type === "date") return formatDateCs(el.value);
+  return el.value ?? "";
+}
+
+function replaceInvoiceControlsForPdf() {
+  const invoice = document.getElementById("invoice");
+  if (!invoice) return;
+
+  invoice.querySelectorAll("input, select, textarea").forEach((el) => {
+    if (el.type === "hidden") return;
+    if (el.closest(".no-print")) return;
+    if (el.style.display === "none") return;
+    if (el.nextElementSibling?.classList.contains("pdf-text-replacement")) return;
+    if (el.nextElementSibling?.classList.contains("pdf-date-replacement")) return;
+    replaceInputWithSpan(el, controlTextForPdf(el));
+  });
+}
+
+function injectPrintFooter() {
+  if (document.getElementById("pdf-print-footer")) return;
+
+  const printedBy = document.getElementById("supplier-name")?.value.trim() || "";
+  const printDate = formatPrintDate();
+  const leftText = printedBy
+    ? `Vytiskl(a): ${printedBy}, ${printDate}`
+    : `Vytiskl(a): , ${printDate}`;
+
+  const footer = document.createElement("div");
+  footer.id = "pdf-print-footer";
+  footer.className = "pdf-print-footer";
+  footer.innerHTML = `
+    <div class="pdf-print-footer-inner">
+      <span>${leftText}</span>
+      <span class="pdf-print-footer-page"></span>
+    </div>
+  `;
+  document.body.appendChild(footer);
+}
+
+function removePrintFooter() {
+  document.getElementById("pdf-print-footer")?.remove();
 }
 
 function fixSectionLabelsForPdf() {
@@ -308,28 +353,8 @@ function prepareForPdf() {
     input.setAttribute("value", input.value);
   });
 
-  document.querySelectorAll("input[type='date']").forEach((input) => {
-    const span = document.createElement("span");
-    span.className = "pdf-date-replacement";
-    span.textContent = formatDateCs(input.value);
-    span.dataset.for = input.id;
-    input.style.display = "none";
-    input.insertAdjacentElement("afterend", span);
-  });
-
-  document.querySelectorAll(".payment-line input, .payment-select, .payment-select-idoklad").forEach((el) => {
-    if (el.tagName === "SELECT") {
-      const span = document.createElement("span");
-      span.className = "pdf-text-replacement";
-      span.textContent = el.value;
-      span.dataset.for = el.id;
-      el.style.display = "none";
-      el.insertAdjacentElement("afterend", span);
-    } else if (el.offsetParent !== null) {
-      replaceInputWithSpan(el);
-    }
-  });
-
+  replaceInvoiceControlsForPdf();
+  injectPrintFooter();
   forcePdfBarColors();
 }
 
@@ -377,12 +402,66 @@ function restoreAfterPdf() {
   document.documentElement.style.colorScheme = pdfPrevColorScheme;
   restorePdfBarColors();
   resetSectionLabels();
+  removePrintFooter();
 
   document.querySelectorAll(".pdf-date-replacement, .pdf-text-replacement").forEach((span) => {
     const input = document.getElementById(span.dataset.for);
     if (input) input.style.display = "";
     span.remove();
   });
+}
+
+function downloadPdfBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function base64ToPdfBlob(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: "application/pdf" });
+}
+
+async function exportPdfViaDesktop(filename) {
+  const base64 = await window.mjFakturaDesktop.exportInvoicePdf();
+  downloadPdfBlob(filename, base64ToPdfBlob(base64));
+}
+
+function exportPdfViaCanvas(invoice, filename) {
+  const pdfScale = Math.min(4, Math.max(3, (window.devicePixelRatio || 1) * 2));
+  const options = {
+    margin: [0, 0, 14, 0],
+    filename,
+    image: { type: "png", quality: 1 },
+    html2canvas: {
+      scale: pdfScale,
+      useCORS: true,
+      letterRendering: true,
+      backgroundColor: "#ffffff",
+      scrollX: 0,
+      scrollY: 0,
+      logging: false,
+    },
+    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+  };
+
+  return html2pdf()
+    .set(options)
+    .from(invoice)
+    .toPdf()
+    .get("pdf")
+    .then((pdf) => {
+      addPdfFooters(pdf);
+      pdf.save(filename);
+    });
 }
 
 function downloadPdf() {
@@ -395,31 +474,14 @@ function downloadPdf() {
 
   const invoice = document.getElementById("invoice");
   const number = document.getElementById("invoice-number").value.trim() || "faktura";
+  const filename = `faktura-${number.replace(/[/\\?%*:|"<>]/g, "-")}.pdf`;
+  const useDesktopPdf = window.mjFakturaDesktop?.exportInvoicePdf;
 
-  const options = {
-    margin: [0, 0, 14, 0],
-    filename: `faktura-${number.replace(/[/\\?%*:|"<>]/g, "-")}.pdf`,
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      letterRendering: true,
-      scrollX: 0,
-      scrollY: 0,
-    },
-    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-  };
+  const exportPromise = useDesktopPdf
+    ? exportPdfViaDesktop(filename)
+    : exportPdfViaCanvas(invoice, filename);
 
-  html2pdf()
-    .set(options)
-    .from(invoice)
-    .toPdf()
-    .get("pdf")
-    .then((pdf) => {
-      addPdfFooters(pdf);
-      pdf.save(options.filename);
-    })
+  exportPromise
     .then(() => {
       restoreAfterPdf();
       btn.disabled = false;

@@ -1,6 +1,5 @@
-const { app, BrowserWindow, shell, session } = require("electron");
-const path = require("path");
-const webRoot = app.isPackaged
+const { app, BrowserWindow, shell, session, ipcMain } = require("electron");
+const path = require("path");const webRoot = app.isPackaged
   ? path.join(process.resourcesPath, "web")
   : path.join(__dirname, "..", "web");
 const { createFakturaServer } = require(path.join(webRoot, "server.js"));
@@ -91,6 +90,7 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
@@ -111,8 +111,17 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(async () => {
-  try {
+ipcMain.handle("export-invoice-pdf", async (event) => {
+  const pdfBuffer = await event.sender.printToPDF({
+    printBackground: true,
+    preferCSSPageSize: true,
+    pageSize: "A4",
+    margins: { top: 0, bottom: 14, left: 0, right: 0 },
+  });
+  return pdfBuffer.toString("base64");
+});
+
+app.whenReady().then(async () => {  try {
     setupOfflineSession();
     await startBackend();
     createWindow();
