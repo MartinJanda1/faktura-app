@@ -1,6 +1,9 @@
 const { app, BrowserWindow, shell, session } = require("electron");
 const path = require("path");
-const { createFakturaServer } = require("../web/server");
+const webRoot = app.isPackaged
+  ? path.join(process.resourcesPath, "web")
+  : path.join(__dirname, "..", "web");
+const { createFakturaServer } = require(path.join(webRoot, "server.js"));
 
 // Potlačí HTTPS upgrady a služby Chromia na pozadí (často způsobují SSL chyby v terminálu)
 app.commandLine.appendSwitch("disable-background-networking");
@@ -81,7 +84,7 @@ function createWindow() {
     height: 900,
     minWidth: 960,
     minHeight: 700,
-    title: "Faktura",
+    title: "MJ Faktura",
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,

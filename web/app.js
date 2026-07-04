@@ -485,7 +485,7 @@ async function saveInvoice() {
       root.dataset.invoiceId = saved.id;
       const location = await FakturaStorage.getSaveLocationLabel();
       showToast(`Faktura uložena (${location})`);
-      document.title = `Faktura ${saved.invoiceNumber || saved.id} – editor`;
+      document.title = `MJ Faktura – ${saved.invoiceNumber || saved.id}`;
 
       try {
         const partyIds = await FakturaParties.syncFromInvoice(data, {
@@ -550,6 +550,16 @@ function applyNewInvoiceSetup(invoice) {
   if (setup.layout) {
     invoice.layout = setup.layout;
   }
+  if (setup.invoiceNumber) {
+    invoice.invoiceNumber = setup.invoiceNumber;
+    invoice.payment = {
+      ...invoice.payment,
+      variableSymbol:
+        setup.payment?.variableSymbol ||
+        InvoiceNumbering.variableSymbolFromNumber(setup.invoiceNumber),
+    };
+    invoice.variableSymbolManual = false;
+  }
 
   return { invoice, setup };
 }
@@ -566,7 +576,7 @@ async function loadInvoiceFromParams() {
       InvoiceModel.applyToForm(invoice, { rebuildRows: rebuildItemRows });
       const root = document.getElementById("invoice-root");
       if (root) root.dataset.resolved = invoice.resolved ? "1" : "";
-      document.title = `Faktura ${invoice.invoiceNumber || invoice.id} – editor`;
+      document.title = `MJ Faktura – ${invoice.invoiceNumber || invoice.id}`;
       calculateGrandTotal();
       return;
     }
@@ -585,7 +595,7 @@ async function loadInvoiceFromParams() {
         delete root.dataset.invoiceId;
         delete root.dataset.resolved;
       }
-      document.title = `Nová faktura (kopie ${source.invoiceNumber || copyId}) – editor`;
+      document.title = `MJ Faktura – kopie ${source.invoiceNumber || copyId}`;
       calculateGrandTotal();
       PaymentQr.updatePaymentQr();
       return;

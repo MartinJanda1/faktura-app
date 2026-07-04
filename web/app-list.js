@@ -825,6 +825,41 @@ async function resolvePartyForConfirm(type) {
   return findPartyRecord(type, value);
 }
 
+function updateNumberPreviewFromSetup() {
+  const startInput = document.getElementById("new-number-start");
+  const preview = document.getElementById("new-number-preview");
+  if (!preview) return;
+  const start = Math.max(1, parseInt(startInput?.value, 10) || 1);
+  preview.textContent = InvoiceNumbering.formatSeriesYear(start, InvoiceNumbering.currentYear());
+}
+
+async function updateNewInvoiceNumberingUI() {
+  const setupEl = document.getElementById("new-invoice-number-setup");
+  const autoEl = document.getElementById("new-invoice-number-auto");
+  const valueEl = document.getElementById("new-invoice-number-value");
+  const startInput = document.getElementById("new-number-start");
+
+  const invoices = await FakturaStorage.readInvoices();
+  const numbers = invoices.map((inv) => inv.invoiceNumber);
+  const result = InvoiceNumbering.suggestNext(numbers);
+  const prefs = InvoiceNumbering.loadPrefs();
+
+  if (startInput && prefs?.startNumber) {
+    startInput.value = String(prefs.startNumber);
+  }
+
+  if (result.needsSetup) {
+    setupEl?.classList.remove("hidden");
+    autoEl?.classList.add("hidden");
+    updateNumberPreviewFromSetup();
+    return;
+  }
+
+  setupEl?.classList.add("hidden");
+  autoEl?.classList.remove("hidden");
+  if (valueEl) valueEl.textContent = result.number;
+}
+
 async function openNewInvoiceModal() {
   try {
     selectedNewInvoiceLayout = localStorage.getItem("faktura-last-layout") || InvoiceLayouts.DEFAULT_LAYOUT;
@@ -850,6 +885,8 @@ async function openNewInvoiceModal() {
 
   document.getElementById("new-supplier-ico").value = "";
   document.getElementById("new-customer-ico").value = "";
+
+  await updateNewInvoiceNumberingUI();
 
   document.getElementById("new-invoice-modal").classList.remove("hidden");
   document.body.classList.add("overflow-hidden");
@@ -889,6 +926,24 @@ async function confirmNewInvoice() {
     if (customerRecord) {
       Object.assign(setup, FakturaParties.customerToInvoiceFields(customerRecord));
     }
+
+    const invoices = await FakturaStorage.readInvoices();
+    const numbers = invoices.map((inv) => inv.invoiceNumber);
+    let startNumber;
+    if (numbers.length === 0) {
+      startNumber = Math.max(1, parseInt(document.getElementById("new-number-start")?.value, 10) || 1);
+      InvoiceNumbering.savePrefs({
+        format: document.getElementById("new-number-format")?.value || "series-year",
+        startNumber,
+        seqPad: 0,
+      });
+    }
+    const numbering = InvoiceNumbering.suggestNext(numbers, { startNumber });
+    setup.invoiceNumber = numbering.number;
+    setup.payment = {
+      ...setup.payment,
+      variableSymbol: InvoiceNumbering.variableSymbolFromNumber(numbering.number),
+    };
 
     sessionStorage.setItem(NEW_INVOICE_SETUP_KEY, JSON.stringify(setup));
 
@@ -1115,6 +1170,7 @@ function initModals() {
   document.getElementById("new-invoice-modal-cancel").addEventListener("click", closeNewInvoiceModal);
   document.getElementById("new-invoice-modal-close").addEventListener("click", closeNewInvoiceModal);
   document.getElementById("new-invoice-modal-backdrop").addEventListener("click", closeNewInvoiceModal);
+  document.getElementById("new-number-start")?.addEventListener("input", updateNumberPreviewFromSetup);
 
   document.getElementById("new-supplier-select")?.addEventListener("change", () => updatePartyPreview("supplier"));
   document.getElementById("new-customer-select")?.addEventListener("change", () => updatePartyPreview("customer"));

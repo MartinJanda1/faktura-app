@@ -17,6 +17,14 @@ const InvoiceModel = (() => {
   }
 
   function incrementInvoiceNumber(value) {
+    const parsed = typeof InvoiceNumbering !== "undefined" ? InvoiceNumbering.parse(value) : null;
+    if (parsed?.kind === "series-year") {
+      return InvoiceNumbering.formatSeriesYear(
+        parsed.sequence + 1,
+        parsed.year,
+        parsed.seqPad
+      );
+    }
     const str = String(value || "").trim();
     const match = str.match(/^(.*?)(\d+)(\s*)$/);
     if (!match) return str ? `${str}-2` : "1";
@@ -26,6 +34,9 @@ const InvoiceModel = (() => {
   }
 
   function findUniqueInvoiceNumber(baseNumber, existingNumbers = []) {
+    if (typeof InvoiceNumbering !== "undefined") {
+      return InvoiceNumbering.findUnique(baseNumber, existingNumbers);
+    }
     const taken = new Set(
       existingNumbers.map((n) => String(n || "").trim().toLowerCase()).filter(Boolean)
     );
@@ -53,10 +64,18 @@ const InvoiceModel = (() => {
     delete invoice.updatedAt;
     invoice.resolved = false;
 
-    const nextNumber = findUniqueInvoiceNumber(
-      incrementInvoiceNumber(source.invoiceNumber),
-      existingInvoiceNumbers.filter((n) => n !== source.invoiceNumber)
-    );
+    const existingNumbers = existingInvoiceNumbers.filter((n) => n !== source.invoiceNumber);
+    const numbering =
+      typeof InvoiceNumbering !== "undefined"
+        ? InvoiceNumbering.suggestForCopy(source.invoiceNumber, existingNumbers)
+        : {
+            number: findUniqueInvoiceNumber(
+              incrementInvoiceNumber(source.invoiceNumber),
+              existingNumbers
+            ),
+          };
+    const nextNumber = numbering.number;
+
     invoice.invoiceNumber = nextNumber;
 
     const dueOffset = daysBetweenIsoDates(source.dates?.issue, source.dates?.due) ?? 20;
@@ -68,7 +87,10 @@ const InvoiceModel = (() => {
 
     invoice.payment = {
       ...(invoice.payment || {}),
-      variableSymbol: nextNumber.replace(/\D/g, "").slice(0, 10),
+      variableSymbol:
+        typeof InvoiceNumbering !== "undefined"
+          ? InvoiceNumbering.variableSymbolFromNumber(nextNumber)
+          : nextNumber.replace(/\D/g, "").slice(0, 10),
     };
     invoice.variableSymbolManual = false;
 

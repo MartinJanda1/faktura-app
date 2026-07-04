@@ -61,7 +61,7 @@ async function fetchAresByIco(icoInput) {
   const res = await fetch(`${ARES_BASE}/${ico}`, {
     headers: {
       Accept: "application/json",
-      "User-Agent": "Faktura-app/1.0",
+      "User-Agent": "MJ-Faktura/1.0",
     },
   });
 

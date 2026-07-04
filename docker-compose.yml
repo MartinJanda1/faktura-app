@@ -1,4 +1,4 @@
-# Faktura-app — web + PostgreSQL pro QNAP Container Station / Docker
+# MJ Faktura — web + PostgreSQL pro QNAP Container Station / Docker
 #
 # Spuštění:
 #   docker compose up -d --build

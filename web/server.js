@@ -3,7 +3,6 @@ const fs = require("fs").promises;
 const path = require("path");
 const { loadEnvFiles, isPgEnabled } = require("./env-loader");
 const { createFileStorage } = require("./storage-file");
-const { createPgStorage } = require("./storage-pg");
 const { createPartiesStorage } = require("./storage-parties");
 const { fetchAresByIco, normalizeIco } = require("./ares");
 
@@ -61,7 +60,7 @@ function createFakturaServer(options = {}) {
 
     const usePg = options.connectionToPg ?? isPgEnabled();
     storage = usePg
-      ? createPgStorage({ dataVersion: DATA_VERSION })
+      ? require("./storage-pg").createPgStorage({ dataVersion: DATA_VERSION })
       : createFileStorage({ dataRoot, dataVersion: DATA_VERSION });
 
     partiesStorage = createPartiesStorage({ dataRoot });
@@ -281,7 +280,7 @@ if (require.main === module) {
   instance
     .start()
     .then(({ port, storage }) => {
-      console.log(`Faktura-app běží na http://localhost:${port}`);
+      console.log(`MJ Faktura běží na http://localhost:${port}`);
       console.log(`Úložiště: ${storage.description}`);
     })
     .catch((err) => {

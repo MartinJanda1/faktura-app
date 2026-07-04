@@ -1,13 +1,16 @@
 {
   "name": "faktura-app-desktop",
   "version": "1.0.0",
-  "description": "Desktopová aplikace pro správu faktur",
+  "description": "MJ Faktura – desktopová aplikace pro správu faktur",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable",
-    "dist:installer": "electron-builder --win nsis"
+    "prebuild": "node scripts/pre-dist.js",
+    "predist": "node scripts/pre-dist.js",
+    "predist:installer": "node scripts/pre-dist.js",
+    "dist": "node scripts/build-win.js portable",
+    "dist:installer": "node scripts/build-win.js nsis"
   },
   "devDependencies": {
     "electron": "^33.2.1",
@@ -15,7 +18,7 @@
   },
   "build": {
     "appId": "cz.faktura.desktop",
-    "productName": "Faktura",
+    "productName": "MJ Faktura",
     "directories": {
       "output": "dist"
     },
@@ -41,15 +44,16 @@
           "target": "portable",
           "arch": ["x64"]
         }
-      ]
+      ],
+      "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "Faktura-${version}-portable.exe"
+      "artifactName": "MJ-Faktura-${version}-portable.exe"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Faktura-${version}-setup.exe"
+      "artifactName": "MJ-Faktura-${version}-setup.exe"
     }
   }
 }
