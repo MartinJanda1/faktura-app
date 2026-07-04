@@ -523,16 +523,19 @@ function renderInvoiceRows() {
           <td class="px-5 py-4">
             <div class="flex justify-end gap-2">
               <a href="invoice.html?id=${encodeURIComponent(summary.id)}" class="btn-icon" title="Otevřít" aria-label="Otevřít fakturu">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.379-8.379-2.828-2.828z"/></svg>
+                ${MdiIcons.svg("pencilOutline")}
+              </a>
+              <a href="invoice.html?copy=${encodeURIComponent(summary.id)}" class="btn-icon btn-icon-copy" title="Kopírovat fakturu" aria-label="Kopírovat fakturu">
+                ${MdiIcons.svg("fileDocumentMultipleOutline")}
               </a>
               <button type="button" class="btn-icon btn-download" data-id="${summary.id}" title="Exportovat .${exportFileExt}" aria-label="Exportovat .${exportFileExt}">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 3a1 1 0 011 1v6.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 10.586V4a1 1 0 011-1z"/><path d="M4 14a1 1 0 011 1v1h10v-1a1 1 0 112 0v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1a1 1 0 011-1z"/></svg>
+                ${MdiIcons.svg("download")}
               </button>
               <button type="button" class="btn-icon btn-resolve ${summary.resolved ? "btn-icon-resolved" : ""}" data-id="${summary.id}" data-resolved="${summary.resolved ? "1" : "0"}" title="${summary.resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}" aria-label="${summary.resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.5 7.5a1 1 0 01-1.42 0l-3.5-3.5a1 1 0 011.42-1.42l2.79 2.79 6.79-6.79a1 1 0 011.42 0z" clip-rule="evenodd"/></svg>
+                ${MdiIcons.svg("checkCircle")}
               </button>
               <button type="button" class="btn-icon btn-icon-danger btn-delete" data-id="${summary.id}" title="Smazat" aria-label="Smazat fakturu">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                ${MdiIcons.svg("deleteOutline")}
               </button>
             </div>
           </td>
@@ -593,28 +596,318 @@ function showLoadError(err) {
   }
 }
 
-function navigateToNewInvoice(mode) {
-  window.location.href = `invoice.html?mode=${mode}`;
+const NEW_INVOICE_SETUP_KEY = "faktura-new-invoice-setup";
+const PARTY_ARES = "__ares__";
+
+function navigateToNewInvoice(layout) {
+  const params = new URLSearchParams({ mode: "empty" });
+  params.set("layout", InvoiceLayouts.normalizeLayoutId(layout));
+  window.location.href = `invoice.html?${params}`;
 }
 
-function openTemplateModal() {
-  document.getElementById("template-modal").classList.remove("hidden");
+let selectedNewInvoiceLayout = InvoiceLayouts.DEFAULT_LAYOUT;
+let partiesCache = { suppliers: [], customers: [] };
+let supplierSelection = { id: "", record: null };
+let customerSelection = { id: "", record: null };
+
+function showNewInvoiceError(message) {
+  const el = document.getElementById("new-invoice-error");
+  if (!el) return;
+  if (message) {
+    el.textContent = message;
+    el.classList.remove("hidden");
+  } else {
+    el.textContent = "";
+    el.classList.add("hidden");
+  }
+}
+
+function renderLayoutPicker() {
+  const picker = document.getElementById("layout-picker");
+  if (!picker) return;
+
+  picker.innerHTML = InvoiceLayouts.listLayouts()
+    .map(
+      (layout) => `
+        <button
+          type="button"
+          class="layout-option${layout.id === selectedNewInvoiceLayout ? " is-selected" : ""}"
+          data-layout-id="${layout.id}"
+          role="radio"
+          aria-checked="${layout.id === selectedNewInvoiceLayout}"
+        >
+          <div class="layout-option-name">${layout.name}</div>
+          <div class="layout-option-desc">${layout.description}</div>
+        </button>
+      `
+    )
+    .join("");
+
+  picker.querySelectorAll(".layout-option").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedNewInvoiceLayout = btn.dataset.layoutId;
+      renderLayoutPicker();
+    });
+  });
+}
+
+function renderPartySelect(selectEl, items, emptyLabel) {
+  if (!selectEl) return;
+  const current = selectEl.value;
+  selectEl.innerHTML = [
+    `<option value="">${emptyLabel}</option>`,
+    `<option value="${PARTY_ARES}">+ Načíst podle IČO (ARES)</option>`,
+    ...items.map(
+      (item) => `<option value="${item.id}">${escapeHtml(item.label || item.supplier?.name || item.customer?.name || item.id)}</option>`
+    ),
+  ].join("");
+
+  if (current && [...selectEl.options].some((opt) => opt.value === current)) {
+    selectEl.value = current;
+  }
+}
+
+function findPartyRecord(type, id) {
+  const list = type === "supplier" ? partiesCache.suppliers : partiesCache.customers;
+  return list.find((item) => item.id === id) || null;
+}
+
+function updatePartyPreview(type) {
+  const isSupplier = type === "supplier";
+  const select = document.getElementById(isSupplier ? "new-supplier-select" : "new-customer-select");
+  const aresBox = document.getElementById(isSupplier ? "new-supplier-ares" : "new-customer-ares");
+  const preview = document.getElementById(isSupplier ? "new-supplier-preview" : "new-customer-preview");
+  const selection = isSupplier ? supplierSelection : customerSelection;
+
+  if (!select) return;
+
+  selection.id = select.value;
+  selection.record = selection.id && selection.id !== PARTY_ARES ? findPartyRecord(type, selection.id) : null;
+
+  aresBox?.classList.toggle("hidden", selection.id !== PARTY_ARES);
+
+  if (selection.record) {
+    const data = isSupplier ? selection.record.supplier : selection.record.customer;
+    preview.textContent = [data?.name, data?.address, data?.city, data?.ico ? `IČ ${data.ico}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    preview.classList.remove("hidden");
+  } else if (selection.id === PARTY_ARES) {
+    preview.textContent = "Zadej IČO a načti údaje z ARES.";
+    preview.classList.remove("hidden");
+  } else {
+    preview.textContent = "";
+    preview.classList.add("hidden");
+  }
+}
+
+function syncQrCheckboxState() {
+  const method = document.getElementById("new-payment-method")?.value || "Převodem";
+  const qr = document.getElementById("new-include-qr");
+  const label = qr?.closest("label");
+  const enabled = method === "Převodem";
+  if (qr) {
+    qr.disabled = !enabled;
+    if (!enabled) qr.checked = false;
+  }
+  label?.classList.toggle("opacity-50", !enabled);
+  label?.classList.toggle("cursor-not-allowed", !enabled);
+}
+
+async function loadPartiesForModal() {
+  partiesCache = await FakturaParties.listParties();
+  if (!Array.isArray(partiesCache.suppliers)) partiesCache.suppliers = [];
+  if (!Array.isArray(partiesCache.customers)) partiesCache.customers = [];
+}
+
+function applyDefaultPartySelections() {
+  const supplierSelect = document.getElementById("new-supplier-select");
+  const customerSelect = document.getElementById("new-customer-select");
+
+  if (partiesCache.suppliers.length === 1) {
+    supplierSelect.value = partiesCache.suppliers[0].id;
+  } else if (partiesCache.suppliers.length === 0) {
+    supplierSelect.value = PARTY_ARES;
+  } else {
+    supplierSelect.value = "";
+  }
+
+  if (partiesCache.customers.length === 1) {
+    customerSelect.value = partiesCache.customers[0].id;
+  } else if (partiesCache.customers.length === 0) {
+    customerSelect.value = PARTY_ARES;
+  } else {
+    customerSelect.value = "";
+  }
+
+  updatePartyPreview("supplier");
+  updatePartyPreview("customer");
+}
+
+async function handleAresLoad(type) {
+  const isSupplier = type === "supplier";
+  const icoInput = document.getElementById(isSupplier ? "new-supplier-ico" : "new-customer-ico");
+  const btn = document.getElementById(isSupplier ? "new-supplier-ares-load" : "new-customer-ares-load");
+  const ico = (icoInput?.value || "").replace(/\D/g, "").slice(0, 8);
+
+  if (ico.length !== 8) {
+    showNewInvoiceError("IČO musí mít 8 číslic.");
+    icoInput?.focus();
+    return null;
+  }
+
+  showNewInvoiceError("");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Načítám…";
+  }
+
+  try {
+    const saved = isSupplier
+      ? await FakturaParties.loadSupplierFromAres(ico)
+      : await FakturaParties.loadCustomerFromAres(ico);
+
+    await loadPartiesForModal();
+    renderPartySelect(
+      document.getElementById(isSupplier ? "new-supplier-select" : "new-customer-select"),
+      isSupplier ? partiesCache.suppliers : partiesCache.customers,
+      isSupplier ? "— prázdný dodavatel —" : "— prázdný odběratel —"
+    );
+
+    const select = document.getElementById(isSupplier ? "new-supplier-select" : "new-customer-select");
+    if (select) select.value = saved.id;
+
+    if (isSupplier) {
+      supplierSelection = { id: saved.id, record: saved };
+    } else {
+      customerSelection = { id: saved.id, record: saved };
+    }
+
+    updatePartyPreview(type);
+    return saved;
+  } catch (err) {
+    showNewInvoiceError(err.message || "Načtení z ARES se nezdařilo.");
+    return null;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Načíst ARES";
+    }
+  }
+}
+
+async function resolvePartyForConfirm(type) {
+  const isSupplier = type === "supplier";
+  const select = document.getElementById(isSupplier ? "new-supplier-select" : "new-customer-select");
+  const value = select?.value || "";
+
+  if (!value) return null;
+
+  if (value === PARTY_ARES) {
+    const icoInput = document.getElementById(isSupplier ? "new-supplier-ico" : "new-customer-ico");
+    const ico = (icoInput?.value || "").replace(/\D/g, "").slice(0, 8);
+    if (ico.length !== 8) {
+      throw new Error(isSupplier ? "Zadej IČO dodavatele." : "Zadej IČO odběratele.");
+    }
+
+    const selection = isSupplier ? supplierSelection : customerSelection;
+    if (selection.record && String(selection.record.ico || selection.record.supplier?.ico || selection.record.customer?.ico || "").replace(/\D/g, "") === ico) {
+      return selection.record;
+    }
+
+    const loaded = await handleAresLoad(type);
+    if (!loaded) {
+      throw new Error(isSupplier ? "Načti dodavatele z ARES (IČO)." : "Načti odběratele z ARES (IČO).");
+    }
+    return loaded;
+  }
+
+  return findPartyRecord(type, value);
+}
+
+async function openNewInvoiceModal() {
+  try {
+    selectedNewInvoiceLayout = localStorage.getItem("faktura-last-layout") || InvoiceLayouts.DEFAULT_LAYOUT;
+  } catch (e) {
+    selectedNewInvoiceLayout = InvoiceLayouts.DEFAULT_LAYOUT;
+  }
+
+  showNewInvoiceError("");
+  renderLayoutPicker();
+  await loadPartiesForModal();
+
+  renderPartySelect(document.getElementById("new-supplier-select"), partiesCache.suppliers, "— prázdný dodavatel —");
+  renderPartySelect(document.getElementById("new-customer-select"), partiesCache.customers, "— prázdný odběratel —");
+  applyDefaultPartySelections();
+
+  const paymentMethod = document.getElementById("new-payment-method");
+  if (paymentMethod) paymentMethod.value = "Převodem";
+
+  const includeQr = document.getElementById("new-include-qr");
+  if (includeQr) includeQr.checked = true;
+
+  syncQrCheckboxState();
+
+  document.getElementById("new-supplier-ico").value = "";
+  document.getElementById("new-customer-ico").value = "";
+
+  document.getElementById("new-invoice-modal").classList.remove("hidden");
   document.body.classList.add("overflow-hidden");
-  document.getElementById("template-modal-use").focus();
+  document.getElementById("new-invoice-modal-confirm").focus();
 }
 
-function closeTemplateModal() {
-  document.getElementById("template-modal").classList.add("hidden");
+function closeNewInvoiceModal() {
+  document.getElementById("new-invoice-modal").classList.add("hidden");
   document.body.classList.remove("overflow-hidden");
+  showNewInvoiceError("");
+}
+
+async function confirmNewInvoice() {
+  const confirmBtn = document.getElementById("new-invoice-modal-confirm");
+  confirmBtn.disabled = true;
+
+  try {
+    showNewInvoiceError("");
+
+    const supplierRecord = await resolvePartyForConfirm("supplier");
+    const customerRecord = await resolvePartyForConfirm("customer");
+
+    const paymentMethod = document.getElementById("new-payment-method")?.value || "Převodem";
+    const includeQr = document.getElementById("new-include-qr")?.checked !== false && paymentMethod === "Převodem";
+
+    const setup = {
+      layout: selectedNewInvoiceLayout,
+      includeQr,
+      payment: { method: paymentMethod },
+    };
+
+    if (supplierRecord) {
+      Object.assign(setup, FakturaParties.supplierToInvoiceFields(supplierRecord));
+      setup.payment = { ...setup.payment, ...supplierRecord.payment, method: paymentMethod };
+    }
+
+    if (customerRecord) {
+      Object.assign(setup, FakturaParties.customerToInvoiceFields(customerRecord));
+    }
+
+    sessionStorage.setItem(NEW_INVOICE_SETUP_KEY, JSON.stringify(setup));
+
+    try {
+      localStorage.setItem("faktura-last-layout", selectedNewInvoiceLayout);
+    } catch (e) {}
+
+    closeNewInvoiceModal();
+    navigateToNewInvoice(selectedNewInvoiceLayout);
+  } catch (err) {
+    showNewInvoiceError(err.message || "Nepodařilo se připravit novou fakturu.");
+  } finally {
+    confirmBtn.disabled = false;
+  }
 }
 
 async function handleNewInvoice() {
   try {
-    if (await FakturaStorage.hasTemplate()) {
-      openTemplateModal();
-    } else {
-      navigateToNewInvoice("empty");
-    }
+    await openNewInvoiceModal();
   } catch (err) {
     showLoadError(err);
   }
@@ -818,16 +1111,28 @@ function initModals() {
   document.getElementById("btn-new-empty").addEventListener("click", handleNewInvoice);
   document.getElementById("btn-export").addEventListener("click", openExportModal);
 
-  document.getElementById("template-modal-use").addEventListener("click", () => {
-    closeTemplateModal();
-    navigateToNewInvoice("template");
+  document.getElementById("new-invoice-modal-confirm").addEventListener("click", confirmNewInvoice);
+  document.getElementById("new-invoice-modal-cancel").addEventListener("click", closeNewInvoiceModal);
+  document.getElementById("new-invoice-modal-close").addEventListener("click", closeNewInvoiceModal);
+  document.getElementById("new-invoice-modal-backdrop").addEventListener("click", closeNewInvoiceModal);
+
+  document.getElementById("new-supplier-select")?.addEventListener("change", () => updatePartyPreview("supplier"));
+  document.getElementById("new-customer-select")?.addEventListener("change", () => updatePartyPreview("customer"));
+  document.getElementById("new-supplier-ares-load")?.addEventListener("click", () => handleAresLoad("supplier"));
+  document.getElementById("new-customer-ares-load")?.addEventListener("click", () => handleAresLoad("customer"));
+  document.getElementById("new-supplier-ico")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAresLoad("supplier");
+    }
   });
-  document.getElementById("template-modal-empty").addEventListener("click", () => {
-    closeTemplateModal();
-    navigateToNewInvoice("empty");
+  document.getElementById("new-customer-ico")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAresLoad("customer");
+    }
   });
-  document.getElementById("template-modal-backdrop").addEventListener("click", closeTemplateModal);
-  document.getElementById("template-modal-close").addEventListener("click", closeTemplateModal);
+  document.getElementById("new-payment-method")?.addEventListener("change", syncQrCheckboxState);
 
   document.getElementById("delete-modal-cancel").addEventListener("click", closeDeleteModal);
   document.getElementById("delete-modal-confirm").addEventListener("click", confirmDelete);
@@ -869,7 +1174,7 @@ function initModals() {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!document.getElementById("export-modal").classList.contains("hidden")) closeExportModal();
-    if (!document.getElementById("template-modal").classList.contains("hidden")) closeTemplateModal();
+    if (!document.getElementById("new-invoice-modal").classList.contains("hidden")) closeNewInvoiceModal();
     if (!document.getElementById("delete-modal").classList.contains("hidden")) closeDeleteModal();
     if (!document.getElementById("bulk-delete-modal").classList.contains("hidden")) closeBulkDeleteModal();
     if (!document.getElementById("template-delete-modal").classList.contains("hidden")) closeTemplateDeleteModal();
@@ -1052,6 +1357,7 @@ function initThemeToggle() {
 }
 
 async function init() {
+  MdiIcons.mount();
   initThemeToggle();
   initFilters();
   initSort();

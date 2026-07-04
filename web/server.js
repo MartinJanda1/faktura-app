@@ -4,6 +4,8 @@ const path = require("path");
 const { loadEnvFiles, isPgEnabled } = require("./env-loader");
 const { createFileStorage } = require("./storage-file");
 const { createPgStorage } = require("./storage-pg");
+const { createPartiesStorage } = require("./storage-parties");
+const { fetchAresByIco, normalizeIco } = require("./ares");
 
 const DATA_VERSION = 1;
 
@@ -23,6 +25,7 @@ function createFakturaServer(options = {}) {
     options.port !== undefined ? Number(options.port) : Number(process.env.PORT) || 3000;
 
   let storage = null;
+  let partiesStorage = null;
 
   function sendJson(res, status, data) {
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -60,6 +63,8 @@ function createFakturaServer(options = {}) {
     storage = usePg
       ? createPgStorage({ dataVersion: DATA_VERSION })
       : createFileStorage({ dataRoot, dataVersion: DATA_VERSION });
+
+    partiesStorage = createPartiesStorage({ dataRoot });
 
     await storage.ensureReady();
     return storage.getStatus();
@@ -168,6 +173,50 @@ function createFakturaServer(options = {}) {
         const body = await parseBody(req);
         const result = await storage.importSqlScript(body?.sql || "");
         sendJson(res, 200, result);
+        return;
+      }
+
+      if (parts[1] === "parties" && parts.length === 2 && req.method === "GET") {
+        sendJson(res, 200, await partiesStorage.readParties());
+        return;
+      }
+
+      if (parts[1] === "parties" && parts[2] === "suppliers" && parts.length === 3 && req.method === "POST") {
+        const body = await parseBody(req);
+        const saved = await partiesStorage.upsertSupplier(body || {});
+        sendJson(res, 201, saved);
+        return;
+      }
+
+      if (parts[1] === "parties" && parts[2] === "customers" && parts.length === 3 && req.method === "POST") {
+        const body = await parseBody(req);
+        const saved = await partiesStorage.upsertCustomer(body || {});
+        sendJson(res, 201, saved);
+        return;
+      }
+
+      if (parts[1] === "parties" && parts[2] === "suppliers" && parts.length === 4 && req.method === "DELETE") {
+        await partiesStorage.deleteSupplier(parts[3]);
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      if (parts[1] === "parties" && parts[2] === "customers" && parts.length === 4 && req.method === "DELETE") {
+        await partiesStorage.deleteCustomer(parts[3]);
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      if (parts[1] === "ares" && parts.length === 3 && req.method === "GET") {
+        const ico = normalizeIco(parts[2]);
+        if (!ico) {
+          sendError(res, 400, "Zadej platné IČO (8 číslic).");
+          return;
+        }
+        const aresData = await fetchAresByIco(ico);
+        sendJson(res, 200, aresData);
         return;
       }
 

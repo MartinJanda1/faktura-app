@@ -16,9 +16,80 @@ const InvoiceModel = (() => {
     return toLocalIsoDate(d);
   }
 
+  function incrementInvoiceNumber(value) {
+    const str = String(value || "").trim();
+    const match = str.match(/^(.*?)(\d+)(\s*)$/);
+    if (!match) return str ? `${str}-2` : "1";
+    const [, prefix, digits, suffix] = match;
+    const next = String(parseInt(digits, 10) + 1).padStart(digits.length, "0");
+    return `${prefix}${next}${suffix}`;
+  }
+
+  function findUniqueInvoiceNumber(baseNumber, existingNumbers = []) {
+    const taken = new Set(
+      existingNumbers.map((n) => String(n || "").trim().toLowerCase()).filter(Boolean)
+    );
+    let candidate = String(baseNumber || "").trim() || "1";
+    let guard = 0;
+    while (taken.has(candidate.toLowerCase()) && guard < 10000) {
+      candidate = incrementInvoiceNumber(candidate);
+      guard += 1;
+    }
+    return candidate;
+  }
+
+  function daysBetweenIsoDates(fromIso, toIso) {
+    if (!fromIso || !toIso) return null;
+    const from = new Date(fromIso);
+    const to = new Date(toIso);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+    return Math.max(0, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
+  }
+
+  function prepareCopyFromInvoice(source, { existingInvoiceNumbers = [] } = {}) {
+    const invoice = JSON.parse(JSON.stringify(source));
+    delete invoice.id;
+    delete invoice.savedAt;
+    delete invoice.updatedAt;
+    invoice.resolved = false;
+
+    const nextNumber = findUniqueInvoiceNumber(
+      incrementInvoiceNumber(source.invoiceNumber),
+      existingInvoiceNumbers.filter((n) => n !== source.invoiceNumber)
+    );
+    invoice.invoiceNumber = nextNumber;
+
+    const dueOffset = daysBetweenIsoDates(source.dates?.issue, source.dates?.due) ?? 20;
+    invoice.dates = {
+      ...(invoice.dates || {}),
+      issue: todayIso(),
+      due: dueDateIso(dueOffset),
+    };
+
+    invoice.payment = {
+      ...(invoice.payment || {}),
+      variableSymbol: nextNumber.replace(/\D/g, "").slice(0, 10),
+    };
+    invoice.variableSymbolManual = false;
+
+    const sourceItems = Array.isArray(source.items) ? source.items : [];
+    invoice.items = sourceItems.length
+      ? sourceItems.map((item) => ({
+          desc: item.desc || "",
+          qty: "0,00",
+          unit: item.unit || "ks",
+          unitPrice: item.unitPrice || "0,00",
+        }))
+      : [{ desc: "", qty: "0,00", unit: "ks", unitPrice: "0,00" }];
+
+    return invoice;
+  }
+
   function defaultEmptyInvoice() {
     return {
       invoiceNumber: "",
+      layout: InvoiceLayouts.DEFAULT_LAYOUT,
+      footerNote: "",
       supplier: {
         name: "",
         address: "",
@@ -27,6 +98,7 @@ const InvoiceModel = (() => {
         ico: "",
         email: "",
         phone: "",
+        vatNote: "",
       },
       customer: {
         name: "",
@@ -45,8 +117,9 @@ const InvoiceModel = (() => {
         accountNumber: "",
         iban: "",
         swift: "",
+        bankName: "",
         variableSymbol: "",
-        constantSymbol: "",
+        constantSymbol: typeof BankUtils !== "undefined" ? BankUtils.DEFAULT_CONSTANT_SYMBOL : "0308",
         method: "Převodem",
       },
       variableSymbolManual: false,
@@ -67,6 +140,8 @@ const InvoiceModel = (() => {
     return {
       id: document.getElementById("invoice-root")?.dataset.invoiceId || "",
       invoiceNumber: document.getElementById("invoice-number")?.value || "",
+      layout: InvoiceLayouts.getCurrentLayout(),
+      footerNote: document.getElementById("footer-note")?.value || "",
       supplier: {
         name: document.getElementById("supplier-name")?.value || "",
         address: document.getElementById("supplier-address")?.value || "",
@@ -75,6 +150,7 @@ const InvoiceModel = (() => {
         ico: document.getElementById("supplier-ico")?.value || "",
         email: document.getElementById("supplier-email")?.value || "",
         phone: document.getElementById("supplier-phone")?.value || "",
+        vatNote: document.getElementById("supplier-vat-note")?.value || "",
       },
       customer: {
         name: document.getElementById("customer-name")?.value || "",
@@ -93,6 +169,7 @@ const InvoiceModel = (() => {
         accountNumber: document.getElementById("account-number")?.value || "",
         iban: document.getElementById("iban")?.value || "",
         swift: document.getElementById("swift")?.value || "",
+        bankName: document.getElementById("bank-name")?.value || "",
         variableSymbol: vs?.value || "",
         constantSymbol: document.getElementById("constant-symbol")?.value || "",
         method: document.getElementById("payment-method")?.value || "Převodem",
@@ -121,6 +198,8 @@ const InvoiceModel = (() => {
     setField("supplier-ico", invoice.supplier?.ico);
     setField("supplier-email", invoice.supplier?.email);
     setField("supplier-phone", invoice.supplier?.phone);
+    setField("supplier-vat-note", invoice.supplier?.vatNote);
+    setField("footer-note", invoice.footerNote);
 
     setField("customer-name", invoice.customer?.name);
     setField("customer-address", invoice.customer?.address);
@@ -136,8 +215,13 @@ const InvoiceModel = (() => {
     setField("account-number", invoice.payment?.accountNumber);
     setField("iban", invoice.payment?.iban);
     setField("swift", invoice.payment?.swift);
+    setField("bank-name", invoice.payment?.bankName);
     setField("variable-symbol", invoice.payment?.variableSymbol);
-    setField("constant-symbol", invoice.payment?.constantSymbol);
+    setField(
+      "constant-symbol",
+      invoice.payment?.constantSymbol ||
+        (typeof BankUtils !== "undefined" ? BankUtils.DEFAULT_CONSTANT_SYMBOL : "0308")
+    );
 
     const method = document.getElementById("payment-method");
     if (method) method.value = invoice.payment?.method || "Převodem";
@@ -154,6 +238,8 @@ const InvoiceModel = (() => {
     if (rebuildRows && invoice.items?.length) {
       rebuildRows(invoice.items);
     }
+
+    InvoiceLayouts.applyLayout(invoice.layout || InvoiceLayouts.DEFAULT_LAYOUT);
   }
 
   function applyTemplateToInvoice(invoice, template) {
@@ -176,6 +262,7 @@ const InvoiceModel = (() => {
         accountNumber: invoice.payment?.accountNumber || "",
         iban: invoice.payment?.iban || "",
         swift: invoice.payment?.swift || "",
+        bankName: invoice.payment?.bankName || "",
         constantSymbol: invoice.payment?.constantSymbol || "",
         method: invoice.payment?.method || "Převodem",
       },
@@ -232,6 +319,8 @@ const InvoiceModel = (() => {
     applyToForm,
     applyTemplateToInvoice,
     extractTemplateFromInvoice,
+    prepareCopyFromInvoice,
+    incrementInvoiceNumber,
     calculateTotal,
     getSummary,
     formatDateCs,

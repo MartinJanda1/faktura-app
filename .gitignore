@@ -8,7 +8,9 @@ pg-scripts/.env
 
 web/data/invoices/*.json
 web/data/sablona.json
+web/data/parties.json
 desktop/data/invoices/*.json
 desktop/data/sablona.json
+desktop/data/parties.json
 
 .env

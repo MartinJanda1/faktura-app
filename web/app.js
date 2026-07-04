@@ -76,6 +76,34 @@ function calculateGrandTotal() {
   return sum;
 }
 
+function rowHasContent(row) {
+  const desc = row.querySelector(".desc")?.value.trim();
+  const qty = parseNumber(row.querySelector(".qty")?.value);
+  const price = parseNumber(row.querySelector(".unit-price")?.value);
+  return Boolean(desc) || qty !== 0 || price !== 0;
+}
+
+function updateRowControls() {
+  document.querySelectorAll(".item-row").forEach((row) => {
+    const btn = row.querySelector(".btn-remove");
+    if (!btn) return;
+    btn.classList.toggle("hidden", !rowHasContent(row));
+  });
+}
+
+function ensureMinOneRow() {
+  if (!document.querySelector(".item-row")) {
+    createItemRow();
+  }
+}
+
+function removeItemRow(row) {
+  row.remove();
+  ensureMinOneRow();
+  updateRowControls();
+  calculateGrandTotal();
+}
+
 let rowPendingRemoval = null;
 
 function openRemoveModal(row) {
@@ -121,6 +149,9 @@ function createItemRowElement(item = {}) {
   const row = document.createElement("tr");
   row.className = "item-row";
   row.innerHTML = `
+    <td class="no-print col-row-ctl align-middle">
+      <button type="button" class="btn-item-ctl btn-item-remove btn-remove hidden" title="Odebrat položku" aria-label="Odebrat položku">−</button>
+    </td>
     <td class="border border-neutral-500 p-1.5 align-middle text-invoice-sm">
       <input type="text" class="desc" placeholder="Označení dodávky">
     </td>
@@ -134,9 +165,6 @@ function createItemRowElement(item = {}) {
       <input type="text" class="unit-price numeric-cell text-right" inputmode="decimal">
     </td>
     <td class="row-total border border-neutral-500 p-1.5 text-right text-invoice-sm font-bold tabular-nums">0,00</td>
-    <td class="no-print cell-action">
-      <button type="button" class="btn-remove h-6 w-6 cursor-pointer rounded border border-[#ccc] bg-white text-base leading-none text-red-600 hover:bg-red-50" title="Odebrat řádek" aria-label="Odebrat řádek">×</button>
-    </td>
   `;
 
   row.querySelector(".desc").value = item.desc ?? "";
@@ -152,6 +180,7 @@ function createItemRow(item) {
   tbody.appendChild(row);
   formatRowNumericCells(row);
   bindRowEvents(row);
+  updateRowControls();
   calculateGrandTotal();
 }
 
@@ -165,18 +194,28 @@ function rebuildItemRows(items) {
     formatRowNumericCells(row);
     bindRowEvents(row);
   });
+  updateRowControls();
   calculateGrandTotal();
 }
 
 function bindRowEvents(row) {
   row.querySelectorAll(".qty, .unit-price").forEach((input) => {
-    input.addEventListener("input", calculateGrandTotal);
+    input.addEventListener("input", () => {
+      calculateGrandTotal();
+      updateRowControls();
+    });
     input.addEventListener("focus", () => onAccountingFocus(input));
     input.addEventListener("blur", () => {
       formatAccountingInput(input);
       calculateGrandTotal();
+      updateRowControls();
     });
   });
+
+  const descInput = row.querySelector(".desc");
+  if (descInput) {
+    descInput.addEventListener("input", updateRowControls);
+  }
 
   const unitInput = row.querySelector(".unit");
   if (unitInput) {
@@ -185,11 +224,7 @@ function bindRowEvents(row) {
 
   const removeBtn = row.querySelector(".btn-remove");
   if (removeBtn) {
-    removeBtn.addEventListener("click", () => {
-      const rows = document.querySelectorAll(".item-row");
-      if (rows.length <= 1) return;
-      openRemoveModal(row);
-    });
+    removeBtn.addEventListener("click", () => removeItemRow(row));
   }
 }
 
@@ -223,9 +258,9 @@ function resetSectionLabels() {
 let pdfPrevDark = false;
 let pdfPrevColorScheme = "";
 let pdfColorOverrides = [];
-let pdfQrWasVisible = null;
 
 function forcePdfBarColors() {
+  if (InvoiceLayouts.getCurrentLayout() === "idoklad") return;
   pdfColorOverrides = [];
   document.querySelectorAll("#invoice .payment-bar, #invoice .recap-bar").forEach((bar) => {
     pdfColorOverrides.push([bar, bar.getAttribute("style")]);
@@ -282,7 +317,7 @@ function prepareForPdf() {
     input.insertAdjacentElement("afterend", span);
   });
 
-  document.querySelectorAll(".payment-line input, .payment-select").forEach((el) => {
+  document.querySelectorAll(".payment-line input, .payment-select, .payment-select-idoklad").forEach((el) => {
     if (el.tagName === "SELECT") {
       const span = document.createElement("span");
       span.className = "pdf-text-replacement";
@@ -296,16 +331,6 @@ function prepareForPdf() {
   });
 
   forcePdfBarColors();
-
-  const includeQrInPdf =
-    PaymentQr.shouldShowQr() && document.getElementById("pdf-include-qr")?.checked !== false;
-  const qrWrap = document.getElementById("payment-qr-wrap");
-  if (qrWrap && !includeQrInPdf) {
-    pdfQrWasVisible = !qrWrap.classList.contains("hidden");
-    qrWrap.classList.add("hidden");
-  } else {
-    pdfQrWasVisible = null;
-  }
 }
 
 function formatPrintDate() {
@@ -358,12 +383,6 @@ function restoreAfterPdf() {
     if (input) input.style.display = "";
     span.remove();
   });
-
-  if (pdfQrWasVisible !== null) {
-    const qrWrap = document.getElementById("payment-qr-wrap");
-    if (qrWrap) qrWrap.classList.toggle("hidden", !pdfQrWasVisible);
-    pdfQrWasVisible = null;
-  }
 }
 
 function downloadPdf() {
@@ -467,6 +486,17 @@ async function saveInvoice() {
       const location = await FakturaStorage.getSaveLocationLabel();
       showToast(`Faktura uložena (${location})`);
       document.title = `Faktura ${saved.invoiceNumber || saved.id} – editor`;
+
+      try {
+        const partyIds = await FakturaParties.syncFromInvoice(data, {
+          supplierPartyId: root?.dataset.supplierPartyId || "",
+          customerPartyId: root?.dataset.customerPartyId || "",
+        });
+        if (partyIds.supplierPartyId) root.dataset.supplierPartyId = partyIds.supplierPartyId;
+        if (partyIds.customerPartyId) root.dataset.customerPartyId = partyIds.customerPartyId;
+      } catch (syncErr) {
+        console.warn("Profil dodavatele/odběratele se nepodařilo uložit.", syncErr);
+      }
     })
     .catch((err) => {
       alert(err.message || "Uložení se nezdařilo.");
@@ -477,120 +507,58 @@ async function saveInvoice() {
     });
 }
 
-function templateExists(template) {
-  return Boolean(
-    template &&
-      (template.supplier?.name ||
-        template.customer?.name ||
-        template.payment?.accountNumber ||
-        template.sourceInvoiceNumber)
-  );
-}
-
-function buildTemplateInfoItems(template) {
-  const items = [];
-  if (template.sourceInvoiceNumber) items.push(`Z faktury č.: ${template.sourceInvoiceNumber}`);
-  if (template.supplier?.name) items.push(`Dodavatel: ${template.supplier.name}`);
-  if (template.supplier?.ico) items.push(`IČ: ${template.supplier.ico}`);
-  if (template.customer?.name) items.push(`Odběratel: ${template.customer.name}`);
-  items.push(`Počet položek: ${template.items?.length || 0}`);
-  if (template.savedAt) {
-    const saved = new Date(template.savedAt);
-    if (!Number.isNaN(saved.getTime())) {
-      items.push(`Uloženo: ${saved.toLocaleString("cs-CZ")}`);
-    }
+function applyLayoutDefaults(layoutId) {
+  const defaults = InvoiceLayouts.getDefaultFieldValues(layoutId);
+  if (defaults.supplier?.vatNote && !document.getElementById("supplier-vat-note")?.value.trim()) {
+    setFieldValue("supplier-vat-note", defaults.supplier.vatNote);
   }
-  return items;
-}
-
-function openTemplateSaveModal(existing) {
-  const exists = templateExists(existing);
-  const title = document.getElementById("template-save-modal-title");
-  const text = document.getElementById("template-save-modal-text");
-  const confirmBtn = document.getElementById("template-save-modal-confirm");
-  const existingBox = document.getElementById("template-save-existing");
-  const existingInfo = document.getElementById("template-save-existing-info");
-
-  if (exists) {
-    title.textContent = "Přepsat uloženou šablonu?";
-    text.textContent =
-      "Šablona už existuje. Chceš ji přepsat údaji z této faktury (dodavatel, odběratel, platba, položky)?";
-    confirmBtn.textContent = "Přepsat";
-    existingInfo.innerHTML = buildTemplateInfoItems(existing)
-      .map((line) => `<li>${line.replace(/</g, "&lt;")}</li>`)
-      .join("");
-    existingBox.classList.remove("hidden");
-  } else {
-    title.textContent = "Uložit jako šablonu?";
-    text.textContent =
-      "Chceš uložit údaje z této faktury jako šablonu (dodavatel, odběratel, platba, položky)?";
-    confirmBtn.textContent = "Uložit";
-    existingInfo.innerHTML = "";
-    existingBox.classList.add("hidden");
+  if (defaults.footerNote && !document.getElementById("footer-note")?.value.trim()) {
+    setFieldValue("footer-note", defaults.footerNote);
   }
-
-  document.getElementById("template-save-modal").classList.remove("hidden");
-  document.body.classList.add("overflow-hidden");
-  confirmBtn.focus();
 }
 
-function closeTemplateSaveModal() {
-  document.getElementById("template-save-modal").classList.add("hidden");
-  document.body.classList.remove("overflow-hidden");
+function setFieldValue(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value ?? "";
 }
 
-async function saveTemplate() {
-  if (!(await validateInvoiceNumberOrToast())) return;
+const NEW_INVOICE_SETUP_KEY = "faktura-new-invoice-setup";
 
+function applyNewInvoiceSetup(invoice) {
+  let setup = null;
   try {
-    const existing = await FakturaStorage.getTemplate();
-    openTemplateSaveModal(existing);
-  } catch (err) {
-    alert(err.message || "Nepodařilo se načíst stávající šablonu.");
-  }
-}
-
-async function confirmSaveTemplate() {
-  const btn = document.getElementById("template-save-modal-confirm");
-  btn.disabled = true;
-
-  const data = InvoiceModel.collectFromForm();
-  const template = InvoiceModel.extractTemplateFromInvoice(data);
-
-  try {
-    await FakturaStorage.saveTemplate(template);
-    closeTemplateSaveModal();
-    const location = await FakturaStorage.getSaveLocationLabel();
-    showToast(
-      (await FakturaStorage.getStorageStatus()).storage === "postgres"
-        ? `Šablona uložena (${location})`
-        : "Šablona uložena do data/sablona.json"
-    );
-  } catch (err) {
-    alert(err.message || "Uložení šablony se nezdařilo.");
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function initTemplateSaveModal() {
-  document.getElementById("template-save-modal-cancel").addEventListener("click", closeTemplateSaveModal);
-  document.getElementById("template-save-modal-confirm").addEventListener("click", confirmSaveTemplate);
-  document.getElementById("template-save-modal-close").addEventListener("click", closeTemplateSaveModal);
-  document.getElementById("template-save-modal-backdrop").addEventListener("click", closeTemplateSaveModal);
-
-  document.addEventListener("keydown", (e) => {
-    const modal = document.getElementById("template-save-modal");
-    if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-      closeTemplateSaveModal();
+    const raw = sessionStorage.getItem(NEW_INVOICE_SETUP_KEY);
+    if (raw) {
+      setup = JSON.parse(raw);
+      sessionStorage.removeItem(NEW_INVOICE_SETUP_KEY);
     }
-  });
+  } catch (e) {
+    sessionStorage.removeItem(NEW_INVOICE_SETUP_KEY);
+  }
+
+  if (!setup) return { invoice, setup: null };
+
+  if (setup.supplier) {
+    invoice.supplier = { ...invoice.supplier, ...setup.supplier };
+  }
+  if (setup.customer) {
+    invoice.customer = { ...invoice.customer, ...setup.customer };
+  }
+  if (setup.payment) {
+    invoice.payment = { ...invoice.payment, ...setup.payment };
+  }
+  if (setup.layout) {
+    invoice.layout = setup.layout;
+  }
+
+  return { invoice, setup };
 }
 
 async function loadInvoiceFromParams() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get("id");
-  const mode = params.get("mode");
+  const copyId = params.get("copy");
+  const layoutParam = params.get("layout");
 
   try {
     if (id) {
@@ -599,21 +567,94 @@ async function loadInvoiceFromParams() {
       const root = document.getElementById("invoice-root");
       if (root) root.dataset.resolved = invoice.resolved ? "1" : "";
       document.title = `Faktura ${invoice.invoiceNumber || invoice.id} – editor`;
+      calculateGrandTotal();
+      return;
+    }
+
+    if (copyId) {
+      const [source, allInvoices] = await Promise.all([
+        FakturaStorage.getInvoice(copyId),
+        FakturaStorage.readInvoices(),
+      ]);
+      const invoice = InvoiceModel.prepareCopyFromInvoice(source, {
+        existingInvoiceNumbers: allInvoices.map((inv) => inv.invoiceNumber),
+      });
+      InvoiceModel.applyToForm(invoice, { rebuildRows: rebuildItemRows });
+      const root = document.getElementById("invoice-root");
+      if (root) {
+        delete root.dataset.invoiceId;
+        delete root.dataset.resolved;
+      }
+      document.title = `Nová faktura (kopie ${source.invoiceNumber || copyId}) – editor`;
+      calculateGrandTotal();
+      PaymentQr.updatePaymentQr();
       return;
     }
 
     let invoice = InvoiceModel.defaultEmptyInvoice();
+    const layoutId = InvoiceLayouts.normalizeLayoutId(layoutParam || InvoiceLayouts.DEFAULT_LAYOUT);
+    invoice.layout = layoutId;
 
-    if (mode === "template" && (await FakturaStorage.hasTemplate())) {
-      const template = await FakturaStorage.getTemplate();
-      invoice = InvoiceModel.applyTemplateToInvoice(invoice, template);
+    const layoutDefaults = InvoiceLayouts.getDefaultFieldValues(layoutId);
+    if (layoutDefaults.supplier?.vatNote) {
+      invoice.supplier.vatNote = layoutDefaults.supplier.vatNote;
+    }
+    if (layoutDefaults.footerNote) {
+      invoice.footerNote = layoutDefaults.footerNote;
     }
 
+    const applied = applyNewInvoiceSetup(invoice);
+    invoice = applied.invoice;
+
     InvoiceModel.applyToForm(invoice, { rebuildRows: rebuildItemRows });
+
+    if (applied.setup) {
+      const root = document.getElementById("invoice-root");
+      if (root) {
+        if (applied.setup.supplierPartyId) root.dataset.supplierPartyId = applied.setup.supplierPartyId;
+        if (applied.setup.customerPartyId) root.dataset.customerPartyId = applied.setup.customerPartyId;
+      }
+
+      const paymentMethod = document.getElementById("payment-method");
+      if (paymentMethod && applied.setup.payment?.method) {
+        paymentMethod.value = applied.setup.payment.method;
+        paymentMethod.dispatchEvent(new Event("change"));
+      }
+
+      PaymentQr.updatePaymentQr();
+    }
   } catch (err) {
     alert(err.message || "Načtení faktury se nezdařilo.");
     window.location.href = "index.html";
   }
+}
+
+function bindIbanAutofill() {
+  const ibanInput = document.getElementById("iban");
+  if (!ibanInput) return;
+
+  function fillFromIban() {
+    const parsed = BankUtils.parseCzechIban(ibanInput.value);
+    if (!parsed) return;
+
+    ibanInput.value = parsed.iban;
+
+    const account = document.getElementById("account-number");
+    if (account) account.value = parsed.accountNumber;
+
+    const swift = document.getElementById("swift");
+    if (swift && parsed.swift) swift.value = parsed.swift;
+
+    const bankName = document.getElementById("bank-name");
+    if (bankName && parsed.bankName) bankName.value = parsed.bankName;
+
+    if (typeof PaymentQr !== "undefined") {
+      PaymentQr.updatePaymentQr();
+    }
+  }
+
+  ibanInput.addEventListener("blur", fillFromIban);
+  ibanInput.addEventListener("change", fillFromIban);
 }
 
 async function init() {
@@ -628,10 +669,20 @@ async function init() {
   document.getElementById("btn-add-row").addEventListener("click", () => createItemRow());
   document.getElementById("btn-pdf").addEventListener("click", downloadPdf);
   document.getElementById("btn-save").addEventListener("click", saveInvoice);
-  document.getElementById("btn-save-template").addEventListener("click", saveTemplate);
   initRemoveModal();
-  initTemplateSaveModal();
   PaymentQr.bindPaymentQrUpdates();
+  bindIbanAutofill();
+
+  const layoutSelect = document.getElementById("layout-select");
+  if (layoutSelect) {
+    layoutSelect.addEventListener("change", () => {
+      const prevLayout = InvoiceLayouts.getCurrentLayout();
+      const nextLayout = InvoiceLayouts.applyLayout(layoutSelect.value);
+      if (prevLayout !== nextLayout) {
+        applyLayoutDefaults(nextLayout);
+      }
+    });
+  }
 
   const vs = document.getElementById("variable-symbol");
   const invoiceNumber = document.getElementById("invoice-number");

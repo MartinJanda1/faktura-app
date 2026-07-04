@@ -12,6 +12,8 @@ function rowToInvoice(row, items) {
     resolved: row.resolved,
     variableSymbolManual: row.variable_symbol_manual,
     version: row.data_version,
+    layout: row.layout || "classic",
+    footerNote: row.footer_note || "",
     supplier: {
       name: row.supplier_name || "",
       address: row.supplier_address || "",
@@ -20,6 +22,7 @@ function rowToInvoice(row, items) {
       ico: row.supplier_ico || "",
       email: row.supplier_email || "",
       phone: row.supplier_phone || "",
+      vatNote: row.supplier_vat_note || "",
     },
     customer: {
       name: row.customer_name || "",
@@ -208,6 +211,7 @@ function createPgStorage({ dataVersion }) {
       await client.query(
         `INSERT INTO invoices (
           id, invoice_number, resolved, variable_symbol_manual, data_version,
+          layout, supplier_vat_note, footer_note,
           supplier_name, supplier_address, supplier_city, supplier_country, supplier_ico, supplier_email, supplier_phone,
           customer_name, customer_address, customer_city, customer_country, customer_ico, customer_dic,
           issue_date, due_date, order_number,
@@ -215,17 +219,21 @@ function createPgStorage({ dataVersion }) {
           created_at, saved_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5,
-          $6, $7, $8, $9, $10, $11, $12,
-          $13, $14, $15, $16, $17, $18,
-          $19, $20, $21,
-          $22, $23, $24, $25, $26, $27,
-          $28, $29, $30
+          $6, $7, $8,
+          $9, $10, $11, $12, $13, $14, $15,
+          $16, $17, $18, $19, $20, $21,
+          $22, $23, $24,
+          $25, $26, $27, $28, $29, $30,
+          $31, $32, $33
         )
         ON CONFLICT (id) DO UPDATE SET
           invoice_number = EXCLUDED.invoice_number,
           resolved = EXCLUDED.resolved,
           variable_symbol_manual = EXCLUDED.variable_symbol_manual,
           data_version = EXCLUDED.data_version,
+          layout = EXCLUDED.layout,
+          supplier_vat_note = EXCLUDED.supplier_vat_note,
+          footer_note = EXCLUDED.footer_note,
           supplier_name = EXCLUDED.supplier_name,
           supplier_address = EXCLUDED.supplier_address,
           supplier_city = EXCLUDED.supplier_city,
@@ -256,6 +264,9 @@ function createPgStorage({ dataVersion }) {
           Boolean(invoice.resolved),
           Boolean(invoice.variableSymbolManual),
           dataVersion,
+          invoice.layout || "classic",
+          supplier.vatNote || "",
+          invoice.footerNote || "",
           supplier.name || "",
           supplier.address || "",
           supplier.city || "",

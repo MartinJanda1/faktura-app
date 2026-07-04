@@ -24,15 +24,12 @@
     }
 
     .ident-columns {
-        @apply mb-3 grid grid-cols-2 grid-rows-2 gap-y-7;
+        @apply mb-3 grid grid-cols-2 gap-x-6 gap-y-7;
+        grid-template-rows: auto auto;
     }
 
     .supplier-top {
-        @apply col-start-1 row-start-1 border-r border-[#d8d8d8] pr-[22px];
-    }
-
-    .contact-sub {
-        @apply col-start-1 row-start-2 mt-0 border-r border-[#d8d8d8] pr-[22px];
+        @apply col-start-1 row-span-2 border-r border-[#d8d8d8] pr-[22px];
     }
 
     .invoice-header-row {
@@ -117,6 +114,33 @@
         @apply w-auto;
     }
 
+    .col-row-ctl {
+        @apply w-8 border-0 bg-transparent p-0.5 pr-1.5 text-center;
+    }
+
+    .items-table th.col-row-ctl,
+    .items-table td.col-row-ctl,
+    .item-row td.col-row-ctl {
+        @apply !border-0 !bg-transparent;
+        box-shadow: none;
+    }
+
+    .btn-item-ctl {
+        @apply inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-neutral-400 bg-white text-base font-bold leading-none text-neutral-700 hover:bg-neutral-100;
+    }
+
+    .btn-item-add {
+        @apply border-brand text-brand hover:bg-brand-light;
+    }
+
+    .btn-item-remove {
+        @apply border-red-300 text-red-600 hover:bg-red-50;
+    }
+
+    .btn-item-ctl.hidden {
+        @apply invisible;
+    }
+
     .col-qty {
         @apply w-[55px] text-right;
     }
@@ -133,20 +157,12 @@
         @apply w-[75px] text-right;
     }
 
-    .col-action {
-        @apply w-8 !border-0 !bg-transparent;
-    }
-
     .item-row td {
         @apply bg-[#f0f0f0];
     }
 
-    .item-row td.col-action {
-        @apply bg-transparent;
-    }
-
-    .cell-action {
-        @apply !border-0 !bg-transparent p-0.5 text-center;
+    .item-row td.col-row-ctl {
+        @apply !bg-transparent p-0.5 pr-1.5 text-center;
     }
 
     .pdf-exporting {
@@ -199,7 +215,19 @@
   }
 
   .payment-qr-frame {
-    @apply mb-2 inline-flex flex-col items-stretch bg-white;
+    @apply inline-flex flex-col items-stretch bg-white;
+  }
+
+  .recap-row {
+    @apply flex w-full items-center justify-between gap-4;
+  }
+
+  .recap-row .recap-bar {
+    @apply ml-auto;
+  }
+
+  .recap-row:has(.payment-qr-frame:not(.hidden)) .recap-bar {
+    @apply ml-0;
   }
 
   .payment-qr-body {
@@ -256,6 +284,10 @@
 
     .btn-icon-resolved {
         @apply border-green-300 bg-green-100 text-green-700 hover:bg-green-200 hover:text-green-800;
+    }
+
+    .btn-icon-copy {
+        @apply border-brand/40 bg-brand-light/60 text-brand hover:border-brand/60 hover:bg-brand-light hover:text-brand-dark;
     }
 
     .modal-close {
@@ -509,10 +541,10 @@ body * {
 
 .dark .text-neutral-900 { color: #f1f5f9; }
 .dark .text-neutral-800 { color: #e2e8f0; }
-.dark .text-neutral-700 { color: #cbd5e1; }
-.dark .text-neutral-600 { color: #aebccd; }
-.dark .text-neutral-500 { color: #94a3b8; }
-.dark .text-neutral-400 { color: #7e8ca1; }
+.dark .text-neutral-700 { color: #e2e8f0; }
+.dark .text-neutral-600 { color: #cbd5e1; }
+.dark .text-neutral-500 { color: #a8b6c9; }
+.dark .text-neutral-400 { color: #8b9ab3; }
 
 .dark .border-neutral-100 { border-color: #283549; }
 .dark .border-neutral-200 { border-color: #334155; }
@@ -568,6 +600,11 @@ body * {
 .dark .hover\:bg-neutral-100:hover { background-color: #2b3a4f; }
 
 .dark .bg-brand-light { background-color: rgba(0, 181, 200, 0.12); }
+.dark .bg-brand-light .text-neutral-700,
+.dark .bg-brand-light .text-neutral-600,
+.dark .bg-brand-light .text-neutral-800 {
+    color: #e2e8f0;
+}
 .dark .text-brand-dark { color: #5fd3e0; }
 
 .dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.13); }
@@ -577,14 +614,14 @@ body * {
 .dark .btn-secondary {
     background-color: #1e293b;
     border-color: #3b4a61;
-    color: #cbd5e1;
+    color: #e2e8f0;
 }
-.dark .btn-secondary:hover { background-color: #243244; }
+.dark .btn-secondary:hover { background-color: #243244; color: #f1f5f9; }
 
 .dark .btn-icon {
     background-color: #1e293b;
     border-color: #3b4a61;
-    color: #aebccd;
+    color: #cbd5e1;
 }
 .dark .btn-icon:hover { background-color: #243244; color: #f1f5f9; }
 
@@ -597,6 +634,16 @@ body * {
     color: #4ade80;
 }
 .dark .btn-icon-resolved:hover { background-color: rgba(34, 197, 94, 0.28); color: #86efac; }
+
+.dark .btn-icon-copy {
+    border-color: rgba(0, 181, 200, 0.45);
+    background-color: rgba(0, 181, 200, 0.16);
+    color: #2dd4bf;
+}
+.dark .btn-icon-copy:hover {
+    background-color: rgba(0, 181, 200, 0.26);
+    color: #5eead4;
+}
 
 .dark .filter-input,
 .dark .filter-select {
@@ -633,4 +680,269 @@ body * {
 .pdf-exporting .recap-bar,
 .pdf-exporting .recap-bar * {
     color: #ffffff !important;
+}
+
+/* Skrytí prvků podle layoutu */
+#invoice.layout-classic .layout-idoklad-only {
+    display: none !important;
+}
+
+#invoice.layout-idoklad .layout-classic-only {
+    display: none !important;
+}
+
+/* iDoklad layout — podle vzoru iDoklad PDF */
+#invoice.layout-idoklad {
+    @apply py-[10mm] pl-[14mm] pr-[14mm] pb-[12mm];
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+#invoice.layout-idoklad .inv-section-ident { order: 1; }
+#invoice.layout-idoklad .inv-section-payment { order: 2; }
+#invoice.layout-idoklad .inv-section-dates { order: 3; }
+#invoice.layout-idoklad .inv-section-items { order: 4; }
+#invoice.layout-idoklad .inv-section-recap { order: 5; }
+#invoice.layout-idoklad .inv-footer-note { order: 6; }
+
+#invoice.layout-idoklad .inv-section {
+    @apply mb-3 grid-cols-1 gap-0;
+}
+
+#invoice.layout-idoklad .section-label {
+    display: none;
+}
+
+#invoice.layout-idoklad .ident-columns {
+    @apply mb-0 gap-x-10 gap-y-0 border-0 pb-0;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+}
+
+#invoice.layout-idoklad .invoice-header-row {
+    @apply col-span-2 mb-5 justify-center gap-2 border-0 pb-0;
+    grid-row: 1;
+    grid-column: 1 / -1;
+    font-size: 22px;
+    font-weight: 400;
+}
+
+#invoice.layout-idoklad .invoice-number-box {
+    @apply min-w-0 border-0 bg-transparent px-1 py-0 text-left font-normal;
+    font-size: 22px;
+}
+
+#invoice.layout-idoklad .supplier-top {
+    @apply row-span-1 border-r-0 pr-0;
+    grid-row: 2;
+    grid-column: 1;
+}
+
+#invoice.layout-idoklad .customer-details {
+    @apply pl-0;
+    grid-row: 2;
+    grid-column: 2;
+}
+
+#invoice.layout-idoklad .idoklad-payment-head {
+    @apply text-invoice-sm font-bold text-neutral-900;
+}
+
+#invoice.layout-idoklad .idoklad-payment-block {
+    @apply mt-0;
+}
+
+#invoice.layout-idoklad .idoklad-payment-block .payment-select {
+    @apply hidden;
+}
+
+#invoice.layout-idoklad .party-name,
+#invoice.layout-idoklad .party-line,
+#invoice.layout-idoklad .inline-short,
+#invoice.layout-idoklad .contact-row input,
+#invoice.layout-idoklad .date-item input,
+#invoice.layout-idoklad #supplier-vat-note,
+#invoice.layout-idoklad #footer-note,
+#invoice.layout-idoklad #bank-name {
+    @apply border-0 bg-transparent px-0 py-0;
+    box-shadow: none;
+}
+
+#invoice.layout-idoklad .party-name {
+    @apply mb-0.5 font-normal;
+}
+
+#invoice.layout-idoklad .party-line,
+#invoice.layout-idoklad .contact-row input {
+    @apply mb-0 text-invoice;
+}
+
+#invoice.layout-idoklad .party-ids {
+    @apply mt-1;
+}
+
+#invoice.layout-idoklad .contact-row {
+    @apply grid-cols-[auto_1fr] gap-2;
+}
+
+#invoice.layout-idoklad #supplier-vat-note {
+    @apply mt-1.5 italic text-neutral-700;
+}
+
+#invoice.layout-idoklad .payment-bar {
+    @apply grid-cols-1 gap-0.5 bg-transparent px-0 py-0 text-neutral-900;
+}
+
+#invoice.layout-idoklad .payment-col {
+    @apply contents;
+}
+
+#invoice.layout-idoklad .payment-line {
+    @apply mb-0 flex-wrap;
+}
+
+#invoice.layout-idoklad .payment-line input,
+#invoice.layout-idoklad .payment-select,
+#invoice.layout-idoklad .payment-select-idoklad,
+#invoice.layout-idoklad #bank-name {
+    @apply min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-invoice-sm text-neutral-900;
+}
+
+#invoice.layout-idoklad .payment-select-idoklad {
+    @apply max-w-none cursor-pointer font-normal;
+}
+
+#invoice.layout-idoklad .payment-line input:focus,
+#invoice.layout-idoklad .payment-select-idoklad:focus,
+#invoice.layout-idoklad .party-name:focus,
+#invoice.layout-idoklad .party-line:focus,
+#invoice.layout-idoklad .inline-short:focus,
+#invoice.layout-idoklad .contact-row input:focus,
+#invoice.layout-idoklad .date-item input:focus,
+#invoice.layout-idoklad .invoice-number-box:focus {
+    @apply bg-brand-light/40 outline outline-1 outline-brand/30;
+}
+
+#invoice.layout-idoklad .inv-section-dates {
+    @apply mb-4 mt-1;
+}
+
+#invoice.layout-idoklad .items-table thead th {
+    @apply border border-neutral-400 bg-neutral-100 p-2 text-left text-[11px] font-bold uppercase tracking-wide;
+}
+
+#invoice.layout-idoklad .items-table th.col-row-ctl,
+#invoice.layout-idoklad .items-table td.col-row-ctl {
+    @apply !border-0 !bg-transparent p-0.5 pr-1.5 normal-case tracking-normal;
+}
+
+#invoice.layout-idoklad .item-row td {
+    @apply border border-neutral-300 bg-white p-2 text-invoice-sm;
+}
+
+#invoice.layout-idoklad .recap-bar {
+    @apply bg-neutral-100 px-4 py-3 text-invoice text-neutral-900;
+}
+
+#invoice.layout-idoklad .recap-row {
+    @apply gap-5;
+}
+
+#invoice.layout-idoklad .recap-bar strong {
+    @apply text-invoice font-bold;
+}
+
+#invoice.layout-idoklad .section-recap {
+    @apply mt-2;
+}
+
+#invoice.layout-idoklad .section-recap .section-body {
+    @apply items-end;
+}
+
+#invoice.layout-idoklad .inv-footer-note {
+    @apply mt-8 border-0 pt-0;
+}
+
+#invoice.layout-idoklad .inv-footer-note input {
+    @apply text-neutral-600;
+}
+
+#invoice.layout-classic .inv-section-dates {
+    @apply -mt-2 mb-3.5;
+}
+
+#invoice.layout-classic .inv-section-ident {
+    @apply mb-0;
+}
+
+#invoice.layout-classic .inv-section-payment {
+    @apply mt-3.5;
+}
+
+/* PDF export iDoklad */
+.pdf-exporting #invoice.layout-idoklad .payment-bar,
+.pdf-exporting #invoice.layout-idoklad .recap-bar {
+    background-color: transparent !important;
+}
+
+.pdf-exporting #invoice.layout-idoklad .payment-bar,
+.pdf-exporting #invoice.layout-idoklad .payment-bar *,
+.pdf-exporting #invoice.layout-idoklad .recap-bar,
+.pdf-exporting #invoice.layout-idoklad .recap-bar * {
+    color: #171717 !important;
+}
+
+.pdf-exporting #invoice.layout-idoklad .party-name,
+.pdf-exporting #invoice.layout-idoklad .party-line,
+.pdf-exporting #invoice.layout-idoklad .inline-short,
+.pdf-exporting #invoice.layout-idoklad .contact-row input,
+.pdf-exporting #invoice.layout-idoklad .date-item input,
+.pdf-exporting #invoice.layout-idoklad .payment-line input,
+.pdf-exporting #invoice.layout-idoklad .payment-select-idoklad,
+.pdf-exporting #invoice.layout-idoklad .invoice-number-box,
+.pdf-exporting #invoice.layout-idoklad #supplier-vat-note,
+.pdf-exporting #invoice.layout-idoklad #footer-note {
+    background-color: transparent !important;
+    outline: none !important;
+}
+
+/* Výběr layoutu v modalu nové faktury */
+.layout-picker {
+    @apply grid grid-cols-1 gap-3 sm:grid-cols-2;
+}
+
+.layout-option {
+    @apply cursor-pointer rounded-lg border-2 border-neutral-200 bg-white p-4 text-left transition hover:border-brand/50;
+}
+
+.layout-option.is-selected {
+    @apply border-brand bg-brand-light;
+}
+
+.layout-option-name {
+    @apply text-sm font-semibold text-neutral-900;
+}
+
+.layout-option-desc {
+    @apply mt-1 text-xs text-neutral-600;
+}
+
+.new-invoice-select,
+.new-invoice-input {
+    @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm text-neutral-900 shadow-sm outline-none transition;
+}
+
+.new-invoice-select:focus,
+.new-invoice-input:focus {
+    @apply border-brand ring-2 ring-brand/20;
+}
+
+.dark .new-invoice-select,
+.dark .new-invoice-input {
+    background-color: #1e293b;
+    border-color: #3b4a61;
+    color: #e2e8f0;
 }

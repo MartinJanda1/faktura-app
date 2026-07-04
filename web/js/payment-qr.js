@@ -10,18 +10,6 @@ const PaymentQr = (() => {
     return isBankTransferPayment();
   }
 
-  function updatePdfQrToggle() {
-    const checkbox = document.getElementById("pdf-include-qr");
-    const label = checkbox?.closest("label");
-    if (!checkbox || !label) return;
-
-    const enabled = isBankTransferPayment();
-    checkbox.disabled = !enabled;
-    label.classList.toggle("opacity-50", !enabled);
-    label.classList.toggle("cursor-not-allowed", !enabled);
-    label.title = enabled ? "" : "QR platba je dostupná jen při způsobu platby Převodem.";
-  }
-
   function parseCzechBankAccount(raw) {
     const value = String(raw || "").replace(/\s/g, "");
     if (!value) return null;
@@ -151,8 +139,6 @@ const PaymentQr = (() => {
     const wrap = document.getElementById("payment-qr-wrap");
     const canvas = document.getElementById("payment-qr-canvas");
     if (!wrap || !canvas || typeof QRCode === "undefined") return;
-
-    updatePdfQrToggle();
 
     if (!shouldShowQr()) {
       wrap.classList.add("hidden");
