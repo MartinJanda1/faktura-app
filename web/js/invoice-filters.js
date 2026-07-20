@@ -84,13 +84,29 @@ const InvoiceFilters = (() => {
     return Boolean(dateFilter.year || dateFilter.month || dateFilter.day);
   }
 
-  function hasAnyFilter(customerFilter, dateFilter) {
-    return hasCustomerFilter(customerFilter) || hasDateFilter(dateFilter);
+  function matchesStatusFilter(invoice, statusFilter) {
+    const status = statusFilter || "active";
+    if (status === "all") return true;
+    if (status === "cancelled") return Boolean(invoice.cancelled);
+    if (status === "resolved") return Boolean(invoice.resolved) && !invoice.cancelled;
+    // active / platné — nevyřízené a nestornované
+    return !invoice.cancelled && !invoice.resolved;
   }
 
-  function filterInvoices(invoices, customerFilter, dateFilter) {
+  function hasStatusFilter(statusFilter) {
+    return Boolean(statusFilter && statusFilter !== "all");
+  }
+
+  function hasAnyFilter(customerFilter, dateFilter, statusFilter) {
+    return hasCustomerFilter(customerFilter) || hasDateFilter(dateFilter) || hasStatusFilter(statusFilter);
+  }
+
+  function filterInvoices(invoices, customerFilter, dateFilter, statusFilter = "all") {
     return invoices.filter(
-      (invoice) => matchesCustomerFilter(invoice, customerFilter) && matchesDateFilter(invoice, dateFilter)
+      (invoice) =>
+        matchesCustomerFilter(invoice, customerFilter) &&
+        matchesDateFilter(invoice, dateFilter) &&
+        matchesStatusFilter(invoice, statusFilter)
     );
   }
 
@@ -153,8 +169,10 @@ const InvoiceFilters = (() => {
     getInvoiceIssueParts,
     matchesCustomerFilter,
     matchesDateFilter,
+    matchesStatusFilter,
     hasCustomerFilter,
     hasDateFilter,
+    hasStatusFilter,
     hasAnyFilter,
     filterInvoices,
     getAvailableYears,

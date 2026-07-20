@@ -1,7 +1,7 @@
 const { Pool } = require("pg");
 const { getPgConfig } = require("./env-loader");
 const { validateImportSql } = require("./sql-export");
-const { safeId, parseAmount, formatAmount, formatDate, toIsoString, isoDateToTimestamp, toLocalTimestamp } = require("./storage-utils");
+const { safeId, parseAmount, formatAmount, formatDate, toIsoString, isoDateToTimestamp, toLocalTimestamp, assertInvoiceDeletable } = require("./storage-utils");
 
 const TEMPLATE_ID = 1;
 
@@ -10,6 +10,7 @@ function rowToInvoice(row, items) {
     id: row.id,
     invoiceNumber: row.invoice_number,
     resolved: row.resolved,
+    cancelled: Boolean(row.cancelled),
     variableSymbolManual: row.variable_symbol_manual,
     version: row.data_version,
     layout: row.layout || "classic",
@@ -210,7 +211,7 @@ function createPgStorage({ dataVersion }) {
 
       await client.query(
         `INSERT INTO invoices (
-          id, invoice_number, resolved, variable_symbol_manual, data_version,
+          id, invoice_number, resolved, cancelled, variable_symbol_manual, data_version,
           layout, supplier_vat_note, footer_note,
           supplier_name, supplier_address, supplier_city, supplier_country, supplier_ico, supplier_email, supplier_phone,
           customer_name, customer_address, customer_city, customer_country, customer_ico, customer_dic,
@@ -218,17 +219,18 @@ function createPgStorage({ dataVersion }) {
           payment_account_number, payment_iban, payment_swift, payment_variable_symbol, payment_constant_symbol, payment_method,
           created_at, saved_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5,
-          $6, $7, $8,
-          $9, $10, $11, $12, $13, $14, $15,
-          $16, $17, $18, $19, $20, $21,
-          $22, $23, $24,
-          $25, $26, $27, $28, $29, $30,
-          $31, $32, $33
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9,
+          $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21, $22,
+          $23, $24, $25,
+          $26, $27, $28, $29, $30, $31,
+          $32, $33, $34
         )
         ON CONFLICT (id) DO UPDATE SET
           invoice_number = EXCLUDED.invoice_number,
           resolved = EXCLUDED.resolved,
+          cancelled = EXCLUDED.cancelled,
           variable_symbol_manual = EXCLUDED.variable_symbol_manual,
           data_version = EXCLUDED.data_version,
           layout = EXCLUDED.layout,
@@ -262,6 +264,7 @@ function createPgStorage({ dataVersion }) {
           id,
           invoice.invoiceNumber || "",
           Boolean(invoice.resolved),
+          Boolean(invoice.cancelled),
           Boolean(invoice.variableSymbolManual),
           dataVersion,
           invoice.layout || "classic",
@@ -313,12 +316,21 @@ function createPgStorage({ dataVersion }) {
   async function deleteInvoiceById(id) {
     const safe = safeId(id);
     if (!safe) throw new Error("Chybí ID faktury.");
-    const { rowCount } = await pool.query(`DELETE FROM invoices WHERE id = $1`, [safe]);
-    if (rowCount === 0) {
+
+    const invoice = await readInvoiceById(safe).catch((err) => {
+      if (err.code === "ENOENT") return null;
+      throw err;
+    });
+    if (!invoice) {
       const err = new Error("Faktura nenalezena.");
       err.code = "ENOENT";
       throw err;
     }
+
+    const all = await listInvoices();
+    assertInvoiceDeletable(invoice, all);
+
+    await pool.query(`DELETE FROM invoices WHERE id = $1`, [safe]);
   }
 
   async function readTemplate() {

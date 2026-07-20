@@ -66,6 +66,60 @@ function toIsoString(value) {
   return str;
 }
 
+function partyKey(party = {}) {
+  const ico = String(party.ico || "").replace(/\D/g, "");
+  if (ico) return `ico:${ico}`;
+  const name = String(party.name || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return name ? `name:${name}` : "";
+}
+
+function parseSeriesYearNumber(value) {
+  const match = String(value || "").trim().match(/^(\d+)\/(\d{2,4})$/);
+  if (!match) return null;
+  const yStr = match[2];
+  const n = parseInt(yStr, 10);
+  const year = yStr.length === 2 ? (n >= 70 ? 1900 + n : 2000 + n) : n;
+  return { sequence: parseInt(match[1], 10), year };
+}
+
+function assertInvoiceDeletable(invoice, allInvoices = []) {
+  if (!invoice) {
+    const err = new Error("Faktura nenalezena.");
+    err.code = "ENOENT";
+    throw err;
+  }
+  if (invoice.cancelled) throw new Error("Stornovanou fakturu nelze smazat.");
+  if (invoice.resolved) throw new Error("Vyřízenou fakturu nelze smazat.");
+
+  const key = partyKey(invoice.supplier);
+  const scoped = key
+    ? allInvoices.filter((inv) => partyKey(inv.supplier) === key)
+    : allInvoices;
+
+  const parsed = parseSeriesYearNumber(invoice.invoiceNumber);
+  if (parsed) {
+    let maxSeq = 0;
+    for (const inv of scoped) {
+      const p = parseSeriesYearNumber(inv.invoiceNumber);
+      if (p && p.year === parsed.year) maxSeq = Math.max(maxSeq, p.sequence);
+    }
+    if (parsed.sequence !== maxSeq) {
+      throw new Error("Smazat lze jen poslední nevyřízenou fakturu v číselné řadě.");
+    }
+    return;
+  }
+
+  const numbers = scoped.map((inv) => String(inv.invoiceNumber || "").trim()).filter(Boolean);
+  const sorted = [...numbers].sort((a, b) => a.localeCompare(b, "cs", { numeric: true }));
+  if (sorted.length && sorted[sorted.length - 1] !== String(invoice.invoiceNumber || "").trim()) {
+    throw new Error("Smazat lze jen poslední nevyřízenou fakturu v číselné řadě.");
+  }
+}
+
 module.exports = {
   safeId,
   parseAmount,
@@ -76,4 +130,5 @@ module.exports = {
   parseIsoDate,
   toLocalTimestamp,
   isoDateToTimestamp,
+  assertInvoiceDeletable,
 };

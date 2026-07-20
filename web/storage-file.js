@@ -1,6 +1,6 @@
 const fs = require("fs").promises;
 const path = require("path");
-const { safeId } = require("./storage-utils");
+const { safeId, assertInvoiceDeletable } = require("./storage-utils");
 
 function createFileStorage({ dataRoot, dataVersion }) {
   const invoicesDir = path.join(dataRoot, "data", "invoices");
@@ -168,6 +168,15 @@ function createFileStorage({ dataRoot, dataVersion }) {
   }
 
   async function deleteInvoiceById(id) {
+    const invoice = await readInvoiceById(id).catch((err) => {
+      if (err.code === "ENOENT") return null;
+      throw err;
+    });
+    if (!invoice) return;
+
+    const all = await listInvoices();
+    assertInvoiceDeletable(invoice, all);
+
     try {
       await fs.unlink(invoiceFilePath(id));
     } catch (err) {

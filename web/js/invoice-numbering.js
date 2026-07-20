@@ -12,6 +12,23 @@ const InvoiceNumbering = (() => {
     return n;
   }
 
+  function partyKey(party = {}) {
+    const ico = String(party.ico || "").replace(/\D/g, "");
+    if (ico) return `ico:${ico}`;
+    const name = String(party.name || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return name ? `name:${name}` : "";
+  }
+
+  function sameParty(a, b) {
+    const keyA = partyKey(a);
+    const keyB = partyKey(b);
+    return Boolean(keyA && keyB && keyA === keyB);
+  }
+
   function parse(value) {
     const raw = String(value || "").trim();
     const match = raw.match(SERIES_YEAR_RE);
@@ -60,8 +77,78 @@ const InvoiceNumbering = (() => {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
   }
 
+  function loadSupplierSeriesPrefs(supplier) {
+    const key = partyKey(supplier);
+    if (!key) return null;
+    const prefs = loadPrefs();
+    return prefs?.suppliers?.[key] || prefs?.customers?.[key] || null;
+  }
+
+  function saveSupplierSeriesPrefs(supplier, seriesPrefs) {
+    const key = partyKey(supplier);
+    if (!key) return;
+    const prefs = loadPrefs() || { format: "series-year", suppliers: {} };
+    prefs.format = prefs.format || "series-year";
+    prefs.suppliers = prefs.suppliers || {};
+    prefs.suppliers[key] = {
+      ...(prefs.suppliers[key] || {}),
+      ...seriesPrefs,
+    };
+    savePrefs(prefs);
+  }
+
   function normalizeExisting(existingNumbers) {
     return (existingNumbers || []).map((n) => String(n || "").trim()).filter(Boolean);
+  }
+
+  function invoiceNumbers(invoices = []) {
+    return invoices.map((inv) => inv?.invoiceNumber).filter(Boolean);
+  }
+
+  function invoicesForSupplier(invoices = [], supplier) {
+    const key = partyKey(supplier);
+    if (!key) return invoices;
+    return invoices.filter((inv) => sameParty(inv.supplier, supplier));
+  }
+
+  /** Je faktura poslední v číselné řadě dodavatele (pro daný rok u formátu číslo/rok)? */
+  function isLastInSeries(invoice, invoices = []) {
+    if (!invoice) return false;
+    const scoped = invoicesForSupplier(invoices, invoice.supplier);
+    const parsed = parse(invoice.invoiceNumber);
+    if (parsed.kind === "series-year") {
+      const { maxSeq } = maxInYear(
+        scoped.map((inv) => inv.invoiceNumber),
+        parsed.year
+      );
+      return parsed.sequence === maxSeq;
+    }
+    // fallback: poslední podle čísla v rámci dodavatele
+    const numbers = scoped.map((inv) => String(inv.invoiceNumber || "").trim()).filter(Boolean);
+    if (!numbers.length) return true;
+    const sorted = [...numbers].sort((a, b) => a.localeCompare(b, "cs", { numeric: true }));
+    return sorted[sorted.length - 1] === String(invoice.invoiceNumber || "").trim();
+  }
+
+  function canDeleteInvoice(invoice, invoices = []) {
+    if (!invoice || invoice.resolved || invoice.cancelled) return false;
+    return isLastInSeries(invoice, invoices);
+  }
+
+  function deleteBlockReason(invoice, invoices = []) {
+    if (!invoice) return "Faktura nenalezena.";
+    if (invoice.cancelled) return "Stornovanou fakturu nelze smazat.";
+    if (invoice.resolved) return "Vyřízenou fakturu nelze smazat.";
+    if (!isLastInSeries(invoice, invoices)) {
+      return "Smazat lze jen poslední nevyřízenou fakturu v číselné řadě.";
+    }
+    return "";
+  }
+
+  function variableSymbolFromNumber(invoiceNumber) {
+    return String(invoiceNumber || "")
+      .replace(/\D/g, "")
+      .slice(0, 10);
   }
 
   function collectSeriesYear(numbers) {
@@ -105,75 +192,91 @@ const InvoiceNumbering = (() => {
     return next;
   }
 
-  function suggestNext(existingNumbers, options = {}) {
+  /**
+   * Navrhne další číslo. Řada patří dodavateli (vystaviteli).
+   * Unikátnost se kontroluje napříč všemi fakturami.
+   */
+  function suggestNext(invoicesOrNumbers, options = {}) {
     const year = options.year ?? currentYear();
-    const numbers = normalizeExisting(existingNumbers);
-    const prefs = loadPrefs();
-    const hasSeries = usesSeriesYearFormat(numbers);
-    const useSeries =
-      options.format === "series-year" ||
-      hasSeries ||
-      prefs?.format === "series-year" ||
-      numbers.length === 0;
+    const invoices = Array.isArray(invoicesOrNumbers) ? invoicesOrNumbers : [];
+    const looksLikeInvoices = invoices.some((item) => item && typeof item === "object" && "invoiceNumber" in item);
 
-    if (useSeries) {
-      const { maxSeq, seqPad: existingPad } = maxInYear(numbers, year);
-      const seqPad = Math.max(existingPad, prefs?.seqPad || 0);
+    const allNumbers = looksLikeInvoices
+      ? invoiceNumbers(invoices)
+      : normalizeExisting(invoicesOrNumbers);
 
-      if (numbers.length === 0 && options.startNumber === undefined && !prefs?.startNumber) {
-        const start = 1;
-        return {
-          needsSetup: true,
-          number: formatSeriesYear(start, year, seqPad),
-          format: "series-year",
-          year,
-          startNumber: start,
-          seqPad,
-        };
-      }
+    const supplier = options.supplier || null;
+    const scopedInvoices = looksLikeInvoices
+      ? invoicesForSupplier(invoices, supplier)
+      : null;
 
-      const startNumber = options.startNumber ?? prefs?.startNumber ?? 1;
-      const nextSeq = numbers.length === 0 ? startNumber : maxSeq + 1;
-      const number = findUnique(formatSeriesYear(nextSeq, year, seqPad), numbers);
+    const scopedNumbers = scopedInvoices ? invoiceNumbers(scopedInvoices) : allNumbers;
+    const supplierPrefs = supplier ? loadSupplierSeriesPrefs(supplier) : null;
+    const globalPrefs = loadPrefs();
+    const scopedEmpty = scopedNumbers.length === 0;
 
+    const needsSetup =
+      options.forceSetup === true ||
+      (scopedEmpty && options.startNumber === undefined && !supplierPrefs?.startNumber && !options.skipSetup);
+
+    if (needsSetup) {
+      const start = options.startNumber ?? supplierPrefs?.startNumber ?? globalPrefs?.startNumber ?? 1;
       return {
-        needsSetup: false,
-        number,
+        needsSetup: true,
+        number: formatSeriesYear(start, year, supplierPrefs?.seqPad || 0),
         format: "series-year",
         year,
-        sequence: nextSeq,
-        seqPad,
+        startNumber: start,
+        seqPad: supplierPrefs?.seqPad || 0,
+        supplierKey: partyKey(supplier),
       };
     }
 
-    const last = numbers[numbers.length - 1] || "1";
-    const parsed = parse(last);
-    if (parsed.kind === "legacy-suffix") {
-      const number = findUnique(
-        `${parsed.prefix}${String(parsed.sequence + 1).padStart(parsed.seqPad, "0")}${parsed.suffix}`,
-        numbers
-      );
-      return { needsSetup: false, number, format: "legacy-suffix" };
-    }
+    const { maxSeq, seqPad: existingPad } = maxInYear(scopedNumbers, year);
+    const seqPad = Math.max(existingPad, supplierPrefs?.seqPad || 0, globalPrefs?.seqPad || 0);
+    const startNumber = options.startNumber ?? supplierPrefs?.startNumber ?? globalPrefs?.startNumber ?? 1;
+    const nextSeq = scopedEmpty ? startNumber : maxSeq + 1;
+    const number = findUnique(formatSeriesYear(nextSeq, year, seqPad), allNumbers);
 
-    const number = findUnique(numbers.length === 0 ? "1" : `${last}-2`, numbers);
-    return { needsSetup: numbers.length === 0, number, format: "unknown" };
+    return {
+      needsSetup: false,
+      number,
+      format: "series-year",
+      year,
+      sequence: nextSeq,
+      seqPad,
+      supplierKey: partyKey(supplier),
+    };
   }
 
-  function suggestForCopy(sourceNumber, existingNumbers, options = {}) {
+  function suggestForCopy(sourceInvoice, invoices, options = {}) {
     const year = options.year ?? currentYear();
-    const numbers = normalizeExisting(existingNumbers);
-    const source = parse(sourceNumber);
+    const list = Array.isArray(invoices) ? invoices : [];
+    const sourceNumber = sourceInvoice?.invoiceNumber || sourceInvoice;
+    const supplier = options.supplier || sourceInvoice?.supplier || null;
+    const allNumbers =
+      list.length && typeof list[0] === "object" ? invoiceNumbers(list) : normalizeExisting(list);
 
-    if (
-      source.kind === "series-year" ||
-      usesSeriesYearFormat(numbers) ||
-      loadPrefs()?.format === "series-year"
-    ) {
+    if (typeof sourceInvoice === "object" && sourceInvoice?.invoiceNumber) {
+      const scoped = invoicesForSupplier(list, supplier);
+      const scopedNumbers = invoiceNumbers(scoped);
+      const source = parse(sourceNumber);
+
+      if (source.kind === "series-year" || usesSeriesYearFormat(scopedNumbers) || usesSeriesYearFormat(allNumbers)) {
+        const { maxSeq, seqPad } = maxInYear(scopedNumbers.length ? scopedNumbers : allNumbers, year);
+        const pad = Math.max(seqPad, source.seqPad || 0);
+        const nextSeq = Math.max(maxSeq, source.sequence || 0) + 1;
+        const number = findUnique(formatSeriesYear(nextSeq, year, pad), allNumbers);
+        return { number, format: "series-year", year, sequence: nextSeq };
+      }
+    }
+
+    const numbers = allNumbers;
+    const source = parse(sourceNumber);
+    if (source.kind === "series-year" || usesSeriesYearFormat(numbers)) {
       const { maxSeq, seqPad } = maxInYear(numbers, year);
-      const prefsPad = loadPrefs()?.seqPad || 0;
-      const pad = Math.max(seqPad, source.seqPad || 0, prefsPad);
-      const nextSeq = maxSeq + 1;
+      const pad = Math.max(seqPad, source.seqPad || 0);
+      const nextSeq = Math.max(maxSeq, source.sequence || 0) + 1;
       const number = findUnique(formatSeriesYear(nextSeq, year, pad), numbers);
       return { number, format: "series-year", year, sequence: nextSeq };
     }
@@ -186,13 +289,7 @@ const InvoiceNumbering = (() => {
       return { number, format: "legacy-suffix" };
     }
 
-    return suggestNext(numbers, options);
-  }
-
-  function variableSymbolFromNumber(invoiceNumber) {
-    return String(invoiceNumber || "")
-      .replace(/\D/g, "")
-      .slice(0, 10);
+    return suggestNext(list, { ...options, supplier, skipSetup: true });
   }
 
   return {
@@ -201,11 +298,19 @@ const InvoiceNumbering = (() => {
     formatSeriesYear,
     loadPrefs,
     savePrefs,
+    loadSupplierSeriesPrefs,
+    saveSupplierSeriesPrefs,
+    partyKey,
+    sameParty,
     suggestNext,
     suggestForCopy,
     findUnique,
     variableSymbolFromNumber,
     currentYear,
     usesSeriesYearFormat,
+    invoicesForSupplier,
+    isLastInSeries,
+    canDeleteInvoice,
+    deleteBlockReason,
   };
 })();

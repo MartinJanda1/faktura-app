@@ -102,6 +102,7 @@ function removeItemRow(row) {
   ensureMinOneRow();
   updateRowControls();
   calculateGrandTotal();
+  markEditorDirty();
 }
 
 let rowPendingRemoval = null;
@@ -128,6 +129,7 @@ function confirmRemoveRow() {
   if (rowPendingRemoval) {
     rowPendingRemoval.remove();
     calculateGrandTotal();
+    markEditorDirty();
   }
   closeRemoveModal();
 }
@@ -471,6 +473,8 @@ function exportPdfViaCanvas(invoice, filename) {
 
 function downloadPdf() {
   const btn = document.getElementById("btn-pdf");
+  if (btn.disabled) return;
+
   btn.disabled = true;
   btn.textContent = "Generuji PDF…";
 
@@ -489,15 +493,73 @@ function downloadPdf() {
   exportPromise
     .then(() => {
       restoreAfterPdf();
-      btn.disabled = false;
       btn.textContent = "Stáhnout PDF";
+      updateEditorActionButtons();
     })
     .catch(() => {
       restoreAfterPdf();
-      btn.disabled = false;
       btn.textContent = "Stáhnout PDF";
+      updateEditorActionButtons();
       alert("PDF se nepodařilo vygenerovat. Zkus obnovit stránku.");
     });
+}
+
+let editorSavedSnapshot = null;
+let editorActionBusy = false;
+
+function isInvoicePersisted() {
+  return Boolean(document.getElementById("invoice-root")?.dataset.invoiceId);
+}
+
+function getEditorSnapshot() {
+  return JSON.stringify(InvoiceModel.collectFromForm());
+}
+
+function isEditorDirty() {
+  if (editorSavedSnapshot === null) return true;
+  return getEditorSnapshot() !== editorSavedSnapshot;
+}
+
+function setEditorButtonStyle(btn, primary) {
+  btn.classList.toggle("btn-editor-primary", primary);
+  btn.classList.toggle("btn-editor-secondary", !primary);
+}
+
+function updateEditorActionButtons() {
+  if (editorActionBusy) return;
+
+  const btnSave = document.getElementById("btn-save");
+  const btnPdf = document.getElementById("btn-pdf");
+  if (!btnSave || !btnPdf) return;
+
+  const persisted = isInvoicePersisted();
+  const dirty = isEditorDirty();
+  const canSave = !persisted || dirty;
+  const canPdf = persisted && !dirty;
+
+  btnSave.disabled = !canSave;
+  btnPdf.disabled = !canPdf;
+  setEditorButtonStyle(btnSave, canSave);
+  setEditorButtonStyle(btnPdf, canPdf);
+}
+
+function markEditorClean() {
+  editorSavedSnapshot = getEditorSnapshot();
+  updateEditorActionButtons();
+}
+
+function markEditorDirty() {
+  updateEditorActionButtons();
+}
+
+function bindEditorDirtyTracking() {
+  const invoice = document.getElementById("invoice");
+  if (invoice) {
+    invoice.addEventListener("input", markEditorDirty);
+    invoice.addEventListener("change", markEditorDirty);
+  }
+
+  document.getElementById("layout-select")?.addEventListener("change", markEditorDirty);
 }
 
 async function validateInvoiceNumberOrToast() {
@@ -534,9 +596,11 @@ async function validateInvoiceNumberOrToast() {
 
 async function saveInvoice() {
   const btn = document.getElementById("btn-save");
+  if (btn.disabled) return;
 
   if (!(await validateInvoiceNumberOrToast())) return;
 
+  editorActionBusy = true;
   btn.disabled = true;
   btn.textContent = "Ukládám…";
 
@@ -546,6 +610,7 @@ async function saveInvoice() {
     data.id = root.dataset.invoiceId;
   }
   data.resolved = root?.dataset.resolved === "1";
+  data.cancelled = root?.dataset.cancelled === "1";
 
   FakturaStorage.saveInvoice(data)
     .then(async (saved) => {
@@ -564,13 +629,17 @@ async function saveInvoice() {
       } catch (syncErr) {
         console.warn("Profil dodavatele/odběratele se nepodařilo uložit.", syncErr);
       }
+
+      history.replaceState(null, "", `invoice.html?id=${encodeURIComponent(saved.id)}`);
+      markEditorClean();
     })
     .catch((err) => {
       alert(err.message || "Uložení se nezdařilo.");
     })
     .finally(() => {
-      btn.disabled = false;
+      editorActionBusy = false;
       btn.textContent = "Uložit fakturu";
+      updateEditorActionButtons();
     });
 }
 
@@ -642,9 +711,13 @@ async function loadInvoiceFromParams() {
       const invoice = await FakturaStorage.getInvoice(id);
       InvoiceModel.applyToForm(invoice, { rebuildRows: rebuildItemRows });
       const root = document.getElementById("invoice-root");
-      if (root) root.dataset.resolved = invoice.resolved ? "1" : "";
+      if (root) {
+        root.dataset.resolved = invoice.resolved ? "1" : "";
+        root.dataset.cancelled = invoice.cancelled ? "1" : "";
+      }
       document.title = `MJ Faktura – ${invoice.invoiceNumber || invoice.id}`;
       calculateGrandTotal();
+      PaymentQr.updatePaymentQr();
       return;
     }
 
@@ -654,13 +727,14 @@ async function loadInvoiceFromParams() {
         FakturaStorage.readInvoices(),
       ]);
       const invoice = InvoiceModel.prepareCopyFromInvoice(source, {
-        existingInvoiceNumbers: allInvoices.map((inv) => inv.invoiceNumber),
+        existingInvoices: allInvoices,
       });
       InvoiceModel.applyToForm(invoice, { rebuildRows: rebuildItemRows });
       const root = document.getElementById("invoice-root");
       if (root) {
         delete root.dataset.invoiceId;
         delete root.dataset.resolved;
+        delete root.dataset.cancelled;
       }
       document.title = `MJ Faktura – kopie ${source.invoiceNumber || copyId}`;
       calculateGrandTotal();
@@ -736,6 +810,22 @@ function bindIbanAutofill() {
 
 async function init() {
   await loadInvoiceFromParams();
+  bindEditorDirtyTracking();
+
+  // Po načtení: uložená faktura = čistá (PDF aktivní), nová/kopie = neuložená (Uložit aktivní).
+  if (isInvoicePersisted()) {
+    markEditorClean();
+  } else {
+    editorSavedSnapshot = null;
+    updateEditorActionButtons();
+  }
+
+  const autoPdf = new URLSearchParams(window.location.search).get("pdf") === "1";
+  if (autoPdf && isInvoicePersisted()) {
+    const invoiceId = document.getElementById("invoice-root")?.dataset.invoiceId;
+    history.replaceState(null, "", `invoice.html?id=${encodeURIComponent(invoiceId)}`);
+    setTimeout(() => downloadPdf(), 400);
+  }
 
   document.getElementById("items-body").addEventListener("input", (e) => {
     if (e.target.matches(".qty, .unit-price")) {
@@ -743,7 +833,10 @@ async function init() {
     }
   });
 
-  document.getElementById("btn-add-row").addEventListener("click", () => createItemRow());
+  document.getElementById("btn-add-row").addEventListener("click", () => {
+    createItemRow();
+    markEditorDirty();
+  });
   document.getElementById("btn-pdf").addEventListener("click", downloadPdf);
   document.getElementById("btn-save").addEventListener("click", saveInvoice);
   initRemoveModal();
@@ -758,6 +851,7 @@ async function init() {
       if (prevLayout !== nextLayout) {
         applyLayoutDefaults(nextLayout);
       }
+      markEditorDirty();
     });
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "faktura-app-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MJ Faktura – desktopová aplikace pro správu faktur",
   "main": "main.js",
   "private": true,

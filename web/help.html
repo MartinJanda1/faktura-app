@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nápověda – MJ Faktura</title>
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("faktura-theme") === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="css/tailwind.css" />
+</head>
+<body class="m-0 flex min-h-screen flex-col bg-neutral-100 p-6 font-sans text-sm leading-snug text-neutral-900">
+  <div class="mx-auto w-full max-w-3xl flex-1">
+    <header class="mb-8">
+      <a href="index.html" class="text-sm text-brand hover:text-brand-dark hover:underline">← Zpět na seznam</a>
+      <h1 class="mt-4 text-2xl font-bold text-neutral-900">Nápověda</h1>
+      <p class="mt-1 text-neutral-600">Krátký přehled práce s aplikací MJ Faktura.</p>
+    </header>
+
+    <article class="space-y-8 rounded-xl bg-white p-6 shadow-sm ring-1 ring-neutral-200">
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Nová faktura</h2>
+        <ol class="list-decimal space-y-1.5 pl-5 text-neutral-700">
+          <li>Klikněte na <strong>+ Nová faktura</strong>.</li>
+          <li>Vyberte vzhled (Klasická / iDoklad), dodavatele a odběratele.</li>
+          <li>Údaje firmy můžete načíst podle IČO z ARES.</li>
+          <li>Číslo faktury se doplní automaticky ve formátu <code class="text-xs">číslo/rok</code> (např. <code class="text-xs">1/2026</code>).</li>
+          <li>U první faktury nastavíte, od jakého čísla má řada začít.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Úprava a uložení</h2>
+        <ul class="list-disc space-y-1.5 pl-5 text-neutral-700">
+          <li>Vyplňte položky, data a platební údaje.</li>
+          <li>IBAN po zadání doplní číslo účtu, SWIFT a název banky.</li>
+          <li>Uložení: tlačítko <strong>Uložit fakturu</strong>.</li>
+          <li>PDF: tlačítko <strong>Stáhnout PDF</strong> (včetně QR při platbě převodem).</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Seznam faktur</h2>
+        <ul class="list-disc space-y-1.5 pl-5 text-neutral-700">
+          <li><strong>Kopírovat</strong> — vytvoří novou fakturu s navazujícím číslem, dnešním datem a vynulovaným množstvím.</li>
+          <li><strong>Exportovat</strong> — jedna faktura nebo hromadný export s filtrem.</li>
+          <li><strong>Importovat</strong> — načtení faktur ze souboru <code class="text-xs">.json</code>.</li>
+          <li>Filtry podle odběratele, data a stavu (platné / vyřízené / stornované / všechny).</li>
+          <li>Řazení sloupců, označení jako vyřízená nebo stornovaná.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Dodavatelé a odběratelé</h2>
+        <p class="text-neutral-700">
+          Při uložení faktury se dodavatel (včetně platebních údajů) a odběratel uloží do seznamu.
+          Při další faktuře je můžete vybrat z nabídky, aniž byste je znovu vyplňovali.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Číslování faktur</h2>
+        <ul class="list-disc space-y-1.5 pl-5 text-neutral-700">
+          <li>Formát <code class="text-xs">číslo/rok</code> (např. <code class="text-xs">6/2026</code>).</li>
+          <li>Řada patří <strong>dodavateli</strong> (vystaviteli) — nesmí se přerušit; u nového dodavatele nastavíte počáteční číslo.</li>
+          <li><strong>Kopírovat</strong> pokračuje v řadě stejného dodavatele (+1).</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Storno, vyřízení a mazání</h2>
+        <ul class="list-disc space-y-1.5 pl-5 text-neutral-700">
+          <li><strong>Stornovaná</strong> faktura zůstane v seznamu (přeškrtnutá) a <strong>zachová číslo</strong> — číselná řada nepřeruší.</li>
+          <li><strong>Vyřízená</strong> faktura (např. uhrazená) ani stornovaná se <strong>nedají smazat</strong>.</li>
+          <li>Smazat lze jen <strong>poslední nevyřízenou a nestornovanou</strong> fakturu v řadě dodavatele (např. chybný návrh).</li>
+          <li>Storno lze zrušit tlačítkem storno znovu; při stornu se zruší i příznak vyřízeno.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Kde se ukládají faktury</h2>
+        <p class="text-neutral-700">
+          Úložiště: <code id="help-storage-path" class="text-xs">data/invoices/</code>
+        </p>
+        <ul class="mt-2 list-disc space-y-1.5 pl-5 text-neutral-700">
+          <li><strong>Web</strong> — složka <code class="text-xs">web/data/invoices/</code> u aplikace.</li>
+          <li><strong>Desktop (.exe)</strong> — <code class="text-xs">%APPDATA%\faktura-app-desktop\data\invoices\</code>.</li>
+          <li>Volitelně lze zapnout <strong>PostgreSQL</strong> (web / Docker) — faktury pak jdou do databáze místo souborů.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-base font-bold text-neutral-900">Světlý / tmavý režim</h2>
+        <p class="text-neutral-700">
+          Přepínač vpravo nahoře na seznamu faktur. Volba se pamatuje v prohlížeči.
+        </p>
+      </section>
+    </article>
+  </div>
+
+  <footer class="app-footer mt-10 border-t border-neutral-200 pt-4">
+    <div class="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 text-xs text-neutral-500">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>© <span data-app-year></span> MJ Faktura</span>
+        <span class="text-neutral-300" aria-hidden="true">·</span>
+        <a href="help.html" class="text-brand hover:text-brand-dark hover:underline">Nápověda</a>
+      </div>
+      <span data-app-version></span>
+    </div>
+  </footer>
+
+  <script src="js/app-meta.js"></script>
+  <script src="js/storage.js"></script>
+  <script>
+    AppMeta.mount();
+    (async function () {
+      const el = document.getElementById("help-storage-path");
+      if (!el || typeof FakturaStorage === "undefined") return;
+      try {
+        const status = await FakturaStorage.getStorageStatus();
+        if (status.storage === "postgres") {
+          el.textContent = `PostgreSQL (${status.database || "DB"})`;
+        } else {
+          el.textContent = "data/invoices/";
+        }
+      } catch (e) {
+        el.textContent = "data/invoices/";
+      }
+    })();
+  </script>
+</body>
+</html>

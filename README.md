@@ -1,5 +1,7 @@
 # MJ Faktura – správa faktur
 
+**Verze:** 1.1.0 — změny viz [CHANGELOG.md](CHANGELOG.md).
+
 Projekt obsahuje dvě verze stejné aplikace:
 
 | Složka | Typ | Popis |
@@ -40,7 +42,7 @@ cd web && npm run build:css
 cd ../desktop && npm run dist
 ```
 
-Výstup: **`desktop/dist/MJ-Faktura-1.0.0-portable.exe`** — není potřeba instalace, stačí spustit soubor.
+Výstup: **`desktop/dist/MJ-Faktura-1.1.0-portable.exe`** — není potřeba instalace, stačí spustit soubor.
 
 Instalační verze: `cd desktop && npm run dist:installer`
 
@@ -231,7 +233,7 @@ Stačí samotný objekt faktury v kořeni souboru (bez obálky `type` / `data`),
 ### Desktop na PC (bez Node.js)
 
 1. Sestav `.exe` (`npm run dist` ve složce `desktop/`)
-2. Zkopíruj `MJ-Faktura-1.0.0-portable.exe` kamkoli (USB, Plocha)
+2. Zkopíruj `MJ-Faktura-1.1.0-portable.exe` kamkoli (USB, Plocha)
 3. Spusť — data se ukládají do `%APPDATA%\faktura-app-desktop\data\`
 4. Záloha = zkopírovat celou složku `data\`
 
@@ -271,9 +273,10 @@ Při startu kontejneru se automaticky spustí DB migrace (`RUN_MIGRATIONS=true`)
 ### Seznam faktur
 
 - Přehled s číslem, odběratelem, datem vystavení a částkou
-- **Filtry** — odběratel (autocomplete podle jména, IČ, DIČ), datum (rok → měsíc → den)
+- **Filtry** — odběratel (autocomplete podle jména, IČ, DIČ), datum (rok → měsíc → den), stav (platné / vyřízené / stornované / všechny)
 - **Řazení** sloupců
-- **Hromadný výběr** — smazání, označení / zrušení vyřízeno
+- **Storno** — faktura zůstane v řadě (přeškrtnutá); smazat lze jen poslední nevyřízenou nestornovanou fakturu
+- **Hromadný výběr** — smazání, označení / zrušení vyřízeno, stornování
 - **Kopírování faktury** — nová faktura s navazujícím číslem v řadě `číslo/rok` (např. z `6/2026` → `7/2026`), dnešním datem a vynulovaným množstvím položek
 - **Import** jedné nebo více faktur ze `.json` (viz [formát JSON](#formát-importovaného-json))
 - **Export** s filtry do jednoho `.json` souboru
@@ -283,7 +286,7 @@ Při startu kontejneru se automaticky spustí DB migrace (`RUN_MIGRATIONS=true`)
 
 - Volba **layoutu** — Klasická nebo iDoklad
 - Výběr **dodavatele** a **odběratele** ze seznamu uložených subjektů
-- **Číslování** — formát `číslo/rok` (např. `6/2026`); u první faktury volba počátečního čísla, poté automatické navazování v rámci roku
+- **Číslování** — formát `číslo/rok` (např. `6/2026`); řada patří dodavateli, u první faktury volba počátečního čísla, poté kontinuální navazování v rámci roku
 - **Načtení podle IČO (ARES)** — doplnění názvu, adresy, DIČ
 - Platební údaje dodavatele se ukládají spolu s dodavatelem do `parties.json`
 

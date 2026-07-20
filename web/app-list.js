@@ -12,15 +12,7 @@ const SORT_COLUMNS = ["number", "customer", "issue", "total"];
 let exportFileExt = "json";
 
 async function updateStorageHint() {
-  const el = document.getElementById("storage-hint");
-  if (!el) return;
-  const status = await FakturaStorage.getStorageStatus();
-  if (status.storage === "postgres") {
-    el.innerHTML = `Faktury se ukládají do <code class="text-xs">PostgreSQL (${escapeHtml(status.database || "DB")})</code>`;
-  } else {
-    el.innerHTML = 'Faktury se ukládají do složky <code class="text-xs">data/invoices/</code>';
-  }
-  await updateExportImportUi(status);
+  await updateExportImportUi();
 }
 
 async function updateExportImportUi(status) {
@@ -32,7 +24,7 @@ async function updateExportImportUi(status) {
   if (importLabel) {
     const textNode = [...importLabel.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
     if (textNode) {
-      textNode.textContent = isPg ? "Importovat (.sql / .json) " : "Importovat .json ";
+      textNode.textContent = isPg ? "Importovat (.sql / .json) " : "Importovat";
     }
   }
 
@@ -54,12 +46,6 @@ async function updateExportImportUi(status) {
       ? "Vyber filtry — exportují se jen odpovídající faktury do jednoho .sql souboru (INSERT skript)."
       : "Vyber filtry — exportují se jen odpovídající faktury do jednoho .json souboru.";
   }
-
-  document.querySelectorAll(".btn-download").forEach((btn) => {
-    const label = `Exportovat .${exportFileExt}`;
-    btn.title = label;
-    btn.setAttribute("aria-label", label);
-  });
 }
 
 async function deletedInvoicesMessage(count) {
@@ -114,9 +100,10 @@ function fillSelect(select, placeholder, values, formatter) {
 }
 
 function createFilterController(config) {
-  const { ids, onChange } = config;
+  const { ids, onChange, defaultStatus = "all" } = config;
   let customerFilter = { query: "", selected: null };
   let dateFilter = { year: "", month: "", day: "" };
+  let statusFilter = defaultStatus;
   let suggestionIndex = -1;
 
   const els = {
@@ -127,10 +114,11 @@ function createFilterController(config) {
     month: document.getElementById(ids.month),
     day: document.getElementById(ids.day),
     clearDates: document.getElementById(ids.clearDates),
+    status: ids.status ? document.getElementById(ids.status) : null,
   };
 
   function getFiltered() {
-    return InvoiceFilters.filterInvoices(allInvoices, customerFilter, dateFilter);
+    return InvoiceFilters.filterInvoices(allInvoices, customerFilter, dateFilter, statusFilter);
   }
 
   function updateDateSelects() {
@@ -308,6 +296,14 @@ function createFilterController(config) {
       updateDateSelects();
       onChange();
     });
+
+    if (els.status) {
+      els.status.value = statusFilter;
+      els.status.addEventListener("change", () => {
+        statusFilter = els.status.value || defaultStatus;
+        onChange();
+      });
+    }
   }
 
   return {
@@ -317,6 +313,7 @@ function createFilterController(config) {
       return {
         customerFilter: InvoiceFilters.cloneCustomerFilter(customerFilter),
         dateFilter: InvoiceFilters.cloneDateFilter(dateFilter),
+        statusFilter,
       };
     },
     closeSuggestions,
@@ -324,13 +321,16 @@ function createFilterController(config) {
     syncFrom(source) {
       customerFilter = InvoiceFilters.cloneCustomerFilter(source.customerFilter);
       dateFilter = InvoiceFilters.cloneDateFilter(source.dateFilter);
+      if (source.statusFilter) statusFilter = source.statusFilter;
       syncInputsFromState();
       onChange();
     },
     reset() {
       customerFilter = { query: "", selected: null };
       dateFilter = { year: "", month: "", day: "" };
+      statusFilter = defaultStatus;
       els.customer.value = "";
+      if (els.status) els.status.value = statusFilter;
       closeSuggestions();
       els.clearCustomer.classList.add("hidden");
       updateDateSelects();
@@ -339,7 +339,9 @@ function createFilterController(config) {
     clearAll() {
       customerFilter = { query: "", selected: null };
       dateFilter = { year: "", month: "", day: "" };
+      statusFilter = defaultStatus;
       els.customer.value = "";
+      if (els.status) els.status.value = statusFilter;
       closeSuggestions();
       els.clearCustomer.classList.add("hidden");
       updateDateSelects();
@@ -352,8 +354,8 @@ function updateListFilterCount() {
   const countEl = document.getElementById("filter-result-count");
   const filtered = listFilters.getFiltered();
   const total = allInvoices.length;
-  const { customerFilter, dateFilter } = listFilters.getState();
-  const hasFilter = InvoiceFilters.hasAnyFilter(customerFilter, dateFilter);
+  const { customerFilter, dateFilter, statusFilter } = listFilters.getState();
+  const hasFilter = InvoiceFilters.hasAnyFilter(customerFilter, dateFilter, statusFilter);
 
   if (!hasFilter) {
     countEl.textContent = total ? `${total} faktur celkem` : "";
@@ -477,10 +479,8 @@ function renderInvoiceRows() {
   const listWrap = document.getElementById("invoice-list-wrap");
   const filterEmpty = document.getElementById("filter-empty-state");
   const invoices = sortInvoices(listFilters.getFiltered());
-  const { customerFilter, dateFilter } = listFilters.getState();
-  const hasFilter = InvoiceFilters.hasAnyFilter(customerFilter, dateFilter);
 
-  if (!invoices.length && hasFilter) {
+  if (!invoices.length && allInvoices.length > 0) {
     tbody.innerHTML = "";
     listWrap.classList.add("hidden");
     filterEmpty.classList.remove("hidden");
@@ -501,21 +501,38 @@ function renderInvoiceRows() {
       const customer = invoice.customer || {};
       const customerMeta = [customer.ico, customer.dic].filter(Boolean).join(" · ");
       const checked = selectedIds.has(summary.id) ? "checked" : "";
-      const rowClass = summary.resolved
-        ? "border-b border-green-100 bg-green-50 hover:bg-green-100"
-        : "border-b border-neutral-100 hover:bg-neutral-50";
+      const canDelete = InvoiceNumbering.canDeleteInvoice(invoice, allInvoices);
+      const deleteReason = InvoiceNumbering.deleteBlockReason(invoice, allInvoices);
+      const cancelled = Boolean(invoice.cancelled);
+      const resolved = Boolean(invoice.resolved) && !cancelled;
+
+      let rowClass = "border-b border-neutral-100 hover:bg-neutral-50";
+      if (cancelled) {
+        rowClass = "invoice-row-cancelled border-b border-neutral-200 bg-neutral-50/80 text-neutral-500";
+      } else if (resolved) {
+        rowClass = "border-b border-green-100 bg-green-50 hover:bg-green-100";
+      }
+
+      const statusBadge = cancelled
+        ? `<span class="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600">Storno</span>`
+        : resolved
+          ? `<span class="ml-2 rounded bg-green-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-800">Vyřízeno</span>`
+          : "";
+
       return `
         <tr class="${rowClass}" data-id="${summary.id}">
           <td class="px-5 py-4">
-            <input type="checkbox" class="row-select h-4 w-4 cursor-pointer accent-brand align-middle" data-id="${summary.id}" aria-label="Vybrat fakturu ${escapeHtml(summary.invoiceNumber)}" ${checked} />
+            <input type="checkbox" class="row-select h-4 w-4 cursor-pointer accent-brand align-middle" data-id="${summary.id}" aria-label="Vybrat fakturu ${escapeHtml(summary.invoiceNumber)}" ${checked} ${cancelled ? "disabled" : ""} />
           </td>
-          <td class="px-5 py-4 font-medium text-neutral-900">${escapeHtml(summary.invoiceNumber)}</td>
-          <td class="px-5 py-4 text-neutral-700">
+          <td class="px-5 py-4 font-medium text-neutral-900">
+            <span class="${cancelled ? "line-through" : ""}">${escapeHtml(summary.invoiceNumber)}</span>${statusBadge}
+          </td>
+          <td class="px-5 py-4 text-neutral-700 ${cancelled ? "line-through" : ""}">
             <div>${escapeHtml(summary.customerName)}</div>
             ${customerMeta ? `<div class="mt-0.5 text-xs text-neutral-400">${escapeHtml(customerMeta)}</div>` : ""}
           </td>
-          <td class="px-5 py-4 text-neutral-700">${escapeHtml(summary.issueDate)}</td>
-          <td class="whitespace-nowrap px-5 py-4 text-right font-medium tabular-nums text-neutral-900">${escapeHtml(summary.total)} Kč</td>
+          <td class="px-5 py-4 text-neutral-700 ${cancelled ? "line-through" : ""}">${escapeHtml(summary.issueDate)}</td>
+          <td class="whitespace-nowrap px-5 py-4 text-right font-medium tabular-nums text-neutral-900 ${cancelled ? "line-through" : ""}">${escapeHtml(summary.total)} Kč</td>
           <td class="px-5 py-4 text-neutral-500">
             <div>${escapeHtml(summary.savedAt)}</div>
             <div class="mt-0.5 text-xs text-neutral-400">${escapeHtml(fileLabel)}</div>
@@ -525,16 +542,19 @@ function renderInvoiceRows() {
               <a href="invoice.html?id=${encodeURIComponent(summary.id)}" class="btn-icon" title="Otevřít" aria-label="Otevřít fakturu">
                 ${MdiIcons.svg("pencilOutline")}
               </a>
-              <a href="invoice.html?copy=${encodeURIComponent(summary.id)}" class="btn-icon btn-icon-copy" title="Kopírovat fakturu" aria-label="Kopírovat fakturu">
+              <a href="invoice.html?copy=${encodeURIComponent(summary.id)}" class="btn-icon btn-icon-copy ${cancelled ? "btn-icon-disabled pointer-events-none" : ""}" title="Kopírovat fakturu" aria-label="Kopírovat fakturu" ${cancelled ? 'tabindex="-1" aria-disabled="true"' : ""}>
                 ${MdiIcons.svg("fileDocumentMultipleOutline")}
               </a>
-              <button type="button" class="btn-icon btn-download" data-id="${summary.id}" title="Exportovat .${exportFileExt}" aria-label="Exportovat .${exportFileExt}">
-                ${MdiIcons.svg("download")}
-              </button>
-              <button type="button" class="btn-icon btn-resolve ${summary.resolved ? "btn-icon-resolved" : ""}" data-id="${summary.id}" data-resolved="${summary.resolved ? "1" : "0"}" title="${summary.resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}" aria-label="${summary.resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}">
+              <a href="invoice.html?id=${encodeURIComponent(summary.id)}&pdf=1" class="btn-icon btn-icon-pdf" title="Stáhnout PDF" aria-label="Stáhnout PDF">
+                ${MdiIcons.svg("filePdfBox")}
+              </a>
+              <button type="button" class="btn-icon btn-resolve ${resolved ? "btn-icon-resolved" : ""} ${cancelled ? "btn-icon-disabled" : ""}" data-id="${summary.id}" data-resolved="${resolved ? "1" : "0"}" title="${cancelled ? "Stornovanou fakturu nelze označit jako vyřízenou" : resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}" aria-label="${cancelled ? "Stornovanou fakturu nelze označit jako vyřízenou" : resolved ? "Zrušit vyřízeno" : "Označit jako vyřízenou"}" ${cancelled ? "disabled" : ""}>
                 ${MdiIcons.svg("checkCircle")}
               </button>
-              <button type="button" class="btn-icon btn-icon-danger btn-delete" data-id="${summary.id}" title="Smazat" aria-label="Smazat fakturu">
+              <button type="button" class="btn-icon btn-cancel ${cancelled ? "btn-icon-cancelled" : ""}" data-id="${summary.id}" data-cancelled="${cancelled ? "1" : "0"}" title="${cancelled ? "Zrušit storno" : "Stornovat fakturu"}" aria-label="${cancelled ? "Zrušit storno" : "Stornovat fakturu"}">
+                ${MdiIcons.svg("cancel")}
+              </button>
+              <button type="button" class="btn-icon btn-icon-danger btn-delete ${canDelete ? "" : "btn-icon-disabled"}" data-id="${summary.id}" title="${canDelete ? "Smazat" : deleteReason}" aria-label="${canDelete ? "Smazat fakturu" : deleteReason}" ${canDelete ? "" : "disabled"}>
                 ${MdiIcons.svg("deleteOutline")}
               </button>
             </div>
@@ -825,6 +845,19 @@ async function resolvePartyForConfirm(type) {
   return findPartyRecord(type, value);
 }
 
+function getSelectedSupplierForNumbering() {
+  const select = document.getElementById("new-supplier-select");
+  const value = select?.value || "";
+  if (!value || value === PARTY_ARES) {
+    if (value === PARTY_ARES && supplierSelection.record?.supplier) {
+      return supplierSelection.record.supplier;
+    }
+    return null;
+  }
+  const record = findPartyRecord("supplier", value);
+  return record?.supplier || null;
+}
+
 function updateNumberPreviewFromSetup() {
   const startInput = document.getElementById("new-number-start");
   const preview = document.getElementById("new-number-preview");
@@ -837,20 +870,26 @@ async function updateNewInvoiceNumberingUI() {
   const setupEl = document.getElementById("new-invoice-number-setup");
   const autoEl = document.getElementById("new-invoice-number-auto");
   const valueEl = document.getElementById("new-invoice-number-value");
+  const setupText = document.getElementById("new-invoice-number-setup-text");
   const startInput = document.getElementById("new-number-start");
 
   const invoices = await FakturaStorage.readInvoices();
-  const numbers = invoices.map((inv) => inv.invoiceNumber);
-  const result = InvoiceNumbering.suggestNext(numbers);
-  const prefs = InvoiceNumbering.loadPrefs();
+  const supplier = getSelectedSupplierForNumbering();
+  const supplierPrefs = supplier ? InvoiceNumbering.loadSupplierSeriesPrefs(supplier) : null;
+  const result = InvoiceNumbering.suggestNext(invoices, { supplier });
 
-  if (startInput && prefs?.startNumber) {
-    startInput.value = String(prefs.startNumber);
+  if (startInput) {
+    startInput.value = String(supplierPrefs?.startNumber || result.startNumber || 1);
   }
 
   if (result.needsSetup) {
     setupEl?.classList.remove("hidden");
     autoEl?.classList.add("hidden");
+    if (setupText) {
+      setupText.textContent = supplier
+        ? "Pro tohoto dodavatele zatím není řada. Nastavte počáteční číslo:"
+        : "Zatím nemáte žádné faktury. Nastavte formát řady pro tento rok:";
+    }
     updateNumberPreviewFromSetup();
     return;
   }
@@ -928,17 +967,30 @@ async function confirmNewInvoice() {
     }
 
     const invoices = await FakturaStorage.readInvoices();
-    const numbers = invoices.map((inv) => inv.invoiceNumber);
+    const supplier = supplierRecord?.supplier || getSelectedSupplierForNumbering();
+    const setupVisible = !document.getElementById("new-invoice-number-setup")?.classList.contains("hidden");
     let startNumber;
-    if (numbers.length === 0) {
+    if (setupVisible) {
       startNumber = Math.max(1, parseInt(document.getElementById("new-number-start")?.value, 10) || 1);
-      InvoiceNumbering.savePrefs({
-        format: document.getElementById("new-number-format")?.value || "series-year",
-        startNumber,
-        seqPad: 0,
-      });
+      if (supplier) {
+        InvoiceNumbering.saveSupplierSeriesPrefs(supplier, {
+          format: document.getElementById("new-number-format")?.value || "series-year",
+          startNumber,
+          seqPad: 0,
+        });
+      } else {
+        InvoiceNumbering.savePrefs({
+          format: document.getElementById("new-number-format")?.value || "series-year",
+          startNumber,
+          seqPad: 0,
+        });
+      }
     }
-    const numbering = InvoiceNumbering.suggestNext(numbers, { startNumber });
+    const numbering = InvoiceNumbering.suggestNext(invoices, {
+      supplier,
+      startNumber,
+      skipSetup: true,
+    });
     setup.invoiceNumber = numbering.number;
     setup.payment = {
       ...setup.payment,
@@ -969,10 +1021,15 @@ async function handleNewInvoice() {
 }
 
 function openDeleteModal(invoice) {
+  const reason = InvoiceNumbering.deleteBlockReason(invoice, allInvoices);
+  if (reason) {
+    showToast(reason);
+    return;
+  }
   invoicePendingDelete = invoice;
   const text = document.getElementById("delete-modal-text");
   const label = invoice.invoiceNumber || invoice.customer?.name || "tuto fakturu";
-  text.textContent = `Opravdu chcete smazat fakturu „${label}"?`;
+  text.textContent = `Opravdu chcete smazat fakturu „${label}"? Smazat lze jen poslední nevyřízenou fakturu v řadě. Tuto akci nelze vrátit.`;
   document.getElementById("delete-modal").classList.remove("hidden");
   document.body.classList.add("overflow-hidden");
   document.getElementById("delete-modal-confirm").focus();
@@ -990,6 +1047,12 @@ async function confirmDelete() {
     return;
   }
 
+  if (!InvoiceNumbering.canDeleteInvoice(invoicePendingDelete, allInvoices)) {
+    showToast(InvoiceNumbering.deleteBlockReason(invoicePendingDelete, allInvoices));
+    closeDeleteModal();
+    return;
+  }
+
   try {
     await FakturaStorage.deleteInvoice(invoicePendingDelete.id);
     showToast(await deletedInvoicesMessage(1));
@@ -1002,15 +1065,32 @@ async function confirmDelete() {
 }
 
 function openBulkDeleteModal() {
-  const count = selectedIds.size;
-  if (count === 0) return;
+  const deletableIds = Array.from(selectedIds).filter((id) => {
+    const invoice = allInvoices.find((inv) => inv.id === id);
+    return invoice && InvoiceNumbering.canDeleteInvoice(invoice, allInvoices);
+  });
+  const skipped = selectedIds.size - deletableIds.length;
+
+  if (deletableIds.length === 0) {
+    showToast(
+      skipped > 0
+        ? "Žádnou z označených faktur nelze smazat (vyřízená, stornovaná, nebo není poslední v řadě)."
+        : "Nejsou vybrané žádné faktury ke smazání."
+    );
+    return;
+  }
 
   const text = document.getElementById("bulk-delete-modal-text");
-  text.textContent =
-    count === 1
+  let msg =
+    deletableIds.length === 1
       ? "Opravdu chcete smazat 1 označenou fakturu? Tuto akci nelze vrátit."
-      : `Opravdu chcete smazat ${count} označených faktur? Tuto akci nelze vrátit.`;
+      : `Opravdu chcete smazat ${deletableIds.length} označených faktur? Tuto akci nelze vrátit.`;
+  if (skipped > 0) {
+    msg += ` ${skipped === 1 ? "1 faktura bude přeskočena." : skipped + " faktur bude přeskočeno."}`;
+  }
+  text.textContent = msg;
 
+  document.getElementById("bulk-delete-modal").dataset.deletableIds = JSON.stringify(deletableIds);
   document.getElementById("bulk-delete-modal").classList.remove("hidden");
   document.body.classList.add("overflow-hidden");
   document.getElementById("bulk-delete-modal-confirm").focus();
@@ -1022,7 +1102,18 @@ function closeBulkDeleteModal() {
 }
 
 async function confirmBulkDelete() {
-  const ids = Array.from(selectedIds);
+  let ids = [];
+  try {
+    ids = JSON.parse(document.getElementById("bulk-delete-modal").dataset.deletableIds || "[]");
+  } catch {
+    ids = [];
+  }
+  if (!ids.length) {
+    ids = Array.from(selectedIds).filter((id) => {
+      const invoice = allInvoices.find((inv) => inv.id === id);
+      return invoice && InvoiceNumbering.canDeleteInvoice(invoice, allInvoices);
+    });
+  }
   if (!ids.length) {
     closeBulkDeleteModal();
     return;
@@ -1172,9 +1263,15 @@ function initModals() {
   document.getElementById("new-invoice-modal-backdrop").addEventListener("click", closeNewInvoiceModal);
   document.getElementById("new-number-start")?.addEventListener("input", updateNumberPreviewFromSetup);
 
-  document.getElementById("new-supplier-select")?.addEventListener("change", () => updatePartyPreview("supplier"));
+  document.getElementById("new-supplier-select")?.addEventListener("change", () => {
+    updatePartyPreview("supplier");
+    updateNewInvoiceNumberingUI();
+  });
   document.getElementById("new-customer-select")?.addEventListener("change", () => updatePartyPreview("customer"));
-  document.getElementById("new-supplier-ares-load")?.addEventListener("click", () => handleAresLoad("supplier"));
+  document.getElementById("new-supplier-ares-load")?.addEventListener("click", async () => {
+    await handleAresLoad("supplier");
+    await updateNewInvoiceNumberingUI();
+  });
   document.getElementById("new-customer-ares-load")?.addEventListener("click", () => handleAresLoad("customer"));
   document.getElementById("new-supplier-ico")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -1205,7 +1302,7 @@ function initModals() {
   document.getElementById("export-modal-backdrop").addEventListener("click", closeExportModal);
   document.getElementById("export-modal-close").addEventListener("click", closeExportModal);
 
-  document.getElementById("btn-clear-filter").addEventListener("click", () => listFilters.clearAll());
+  document.getElementById("btn-clear-filter").addEventListener("click", () => listFilters.reset());
 
   document.getElementById("select-all").addEventListener("change", (e) => {
     if (e.target.checked) {
@@ -1221,6 +1318,7 @@ function initModals() {
 
   document.getElementById("btn-bulk-resolve").addEventListener("click", () => bulkSetResolved(true));
   document.getElementById("btn-bulk-unresolve").addEventListener("click", () => bulkSetResolved(false));
+  document.getElementById("btn-bulk-cancel").addEventListener("click", () => bulkSetCancelled(true));
   document.getElementById("btn-bulk-clear").addEventListener("click", clearSelection);
   document.getElementById("btn-bulk-delete").addEventListener("click", openBulkDeleteModal);
   document.getElementById("bulk-delete-modal-cancel").addEventListener("click", closeBulkDeleteModal);
@@ -1260,20 +1358,9 @@ function initListActions() {
   });
 
   document.getElementById("invoice-list").addEventListener("click", async (e) => {
-    const downloadBtn = e.target.closest(".btn-download");
-    if (downloadBtn) {
-      try {
-        const invoice = await FakturaStorage.getInvoice(downloadBtn.dataset.id);
-        await FakturaStorage.downloadInvoiceExport(invoice);
-        showToast(`Kopie faktury exportována (.${exportFileExt}).`);
-      } catch (err) {
-        alert(err.message || "Export se nezdařil.");
-      }
-      return;
-    }
-
     const resolveBtn = e.target.closest(".btn-resolve");
     if (resolveBtn) {
+      if (resolveBtn.disabled) return;
       const nextResolved = resolveBtn.dataset.resolved !== "1";
       try {
         await setInvoiceResolved(resolveBtn.dataset.id, nextResolved);
@@ -1285,21 +1372,49 @@ function initListActions() {
       return;
     }
 
+    const cancelBtn = e.target.closest(".btn-cancel");
+    if (cancelBtn) {
+      const nextCancelled = cancelBtn.dataset.cancelled !== "1";
+      try {
+        await setInvoiceCancelled(cancelBtn.dataset.id, nextCancelled);
+        showToast(nextCancelled ? "Faktura stornována." : "Storno zrušeno.");
+        await renderInvoiceList();
+      } catch (err) {
+        alert(err.message || "Změna stavu se nezdařila.");
+      }
+      return;
+    }
+
     const deleteBtn = e.target.closest(".btn-delete");
     if (deleteBtn) {
+      if (deleteBtn.disabled) {
+        showToast(deleteBtn.title || "Tuto fakturu nelze smazat.");
+        return;
+      }
       try {
         const invoice = await FakturaStorage.getInvoice(deleteBtn.dataset.id);
         openDeleteModal(invoice);
       } catch (err) {
         alert(err.message || "Načtení faktury se nezdařilo.");
       }
+      return;
     }
   });
 }
 
 async function setInvoiceResolved(id, resolved) {
   const invoice = await FakturaStorage.getInvoice(id);
+  if (invoice.cancelled) {
+    throw new Error("Stornovanou fakturu nelze označit jako vyřízenou.");
+  }
   invoice.resolved = resolved;
+  await FakturaStorage.saveInvoice(invoice);
+}
+
+async function setInvoiceCancelled(id, cancelled) {
+  const invoice = await FakturaStorage.getInvoice(id);
+  invoice.cancelled = cancelled;
+  if (cancelled) invoice.resolved = false;
   await FakturaStorage.saveInvoice(invoice);
 }
 
@@ -1322,6 +1437,34 @@ async function bulkSetResolved(resolved) {
       resolved
         ? `${okCount === 1 ? "1 faktura označena" : okCount + " faktur označeno"} jako vyřízené.`
         : `Vyřízeno zrušeno u ${okCount === 1 ? "1 faktury" : okCount + " faktur"}.`
+    );
+  }
+  if (failed.length) {
+    alert(`U některých faktur se stav nezměnil (${failed.length}).`);
+  }
+
+  await renderInvoiceList();
+}
+
+async function bulkSetCancelled(cancelled) {
+  const ids = Array.from(selectedIds);
+  if (!ids.length) return;
+
+  const failed = [];
+  for (const id of ids) {
+    try {
+      await setInvoiceCancelled(id, cancelled);
+    } catch (err) {
+      failed.push(id);
+    }
+  }
+
+  const okCount = ids.length - failed.length;
+  if (okCount > 0) {
+    showToast(
+      cancelled
+        ? `${okCount === 1 ? "1 faktura stornována" : okCount + " faktur stornováno"}.`
+        : `Storno zrušeno u ${okCount === 1 ? "1 faktury" : okCount + " faktur"}.`
     );
   }
   if (failed.length) {
@@ -1358,7 +1501,9 @@ function initFilters() {
       month: "filter-month",
       day: "filter-day",
       clearDates: "filter-clear-dates",
+      status: "filter-status",
     },
+    defaultStatus: "active",
     onChange: () => {
       updateListFilterCount();
       renderInvoiceRows();
@@ -1413,6 +1558,7 @@ function initThemeToggle() {
 }
 
 async function init() {
+  AppMeta.mount();
   MdiIcons.mount();
   initThemeToggle();
   initFilters();

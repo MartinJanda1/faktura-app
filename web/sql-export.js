@@ -60,6 +60,7 @@ function sqlNumber(value) {
 const INVOICE_UPDATE_SET = `
   invoice_number = EXCLUDED.invoice_number,
   resolved = EXCLUDED.resolved,
+  cancelled = EXCLUDED.cancelled,
   variable_symbol_manual = EXCLUDED.variable_symbol_manual,
   data_version = EXCLUDED.data_version,
   supplier_name = EXCLUDED.supplier_name,
@@ -100,7 +101,7 @@ function invoiceToSqlStatements(invoice, dataVersion = 1) {
   lines.push(`-- Faktura: ${invoice.invoiceNumber || id}`);
   lines.push(
     `INSERT INTO invoices (
-  id, invoice_number, resolved, variable_symbol_manual, data_version,
+  id, invoice_number, resolved, cancelled, variable_symbol_manual, data_version,
   supplier_name, supplier_address, supplier_city, supplier_country, supplier_ico, supplier_email, supplier_phone,
   customer_name, customer_address, customer_city, customer_country, customer_ico, customer_dic,
   issue_date, due_date, order_number,
@@ -110,6 +111,7 @@ function invoiceToSqlStatements(invoice, dataVersion = 1) {
   ${sqlLiteral(id)},
   ${sqlLiteral(invoice.invoiceNumber || "")},
   ${sqlLiteral(Boolean(invoice.resolved))},
+  ${sqlLiteral(Boolean(invoice.cancelled))},
   ${sqlLiteral(Boolean(invoice.variableSymbolManual))},
   ${dataVersion},
   ${sqlLiteral(supplier.name || "")},

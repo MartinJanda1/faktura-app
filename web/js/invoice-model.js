@@ -57,21 +57,26 @@ const InvoiceModel = (() => {
     return Math.max(0, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
   }
 
-  function prepareCopyFromInvoice(source, { existingInvoiceNumbers = [] } = {}) {
+  function prepareCopyFromInvoice(source, { existingInvoices = [], existingInvoiceNumbers = [] } = {}) {
     const invoice = JSON.parse(JSON.stringify(source));
     delete invoice.id;
     delete invoice.savedAt;
     delete invoice.updatedAt;
     invoice.resolved = false;
+    invoice.cancelled = false;
 
-    const existingNumbers = existingInvoiceNumbers.filter((n) => n !== source.invoiceNumber);
+    const invoices =
+      existingInvoices.length > 0
+        ? existingInvoices
+        : existingInvoiceNumbers.map((invoiceNumber) => ({ invoiceNumber }));
+
     const numbering =
       typeof InvoiceNumbering !== "undefined"
-        ? InvoiceNumbering.suggestForCopy(source.invoiceNumber, existingNumbers)
+        ? InvoiceNumbering.suggestForCopy(source, invoices, { supplier: source.supplier })
         : {
             number: findUniqueInvoiceNumber(
               incrementInvoiceNumber(source.invoiceNumber),
-              existingNumbers
+              invoices.map((inv) => inv.invoiceNumber).filter((n) => n !== source.invoiceNumber)
             ),
           };
     const nextNumber = numbering.number;
@@ -146,6 +151,7 @@ const InvoiceModel = (() => {
       },
       variableSymbolManual: false,
       resolved: false,
+      cancelled: false,
       items: [{ desc: "", qty: "1,00", unit: "ks", unitPrice: "0,00" }],
     };
   }
@@ -332,6 +338,7 @@ const InvoiceModel = (() => {
       total: total.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       savedAt: formatSavedAt(invoice.savedAt || invoice.updatedAt),
       resolved: Boolean(invoice.resolved),
+      cancelled: Boolean(invoice.cancelled),
     };
   }
 

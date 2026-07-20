@@ -271,6 +271,18 @@
     color: #000;
   }
 
+    .btn-editor {
+        @apply cursor-pointer rounded border px-[18px] py-2.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-55;
+    }
+
+    .btn-editor-primary {
+        @apply border-brand bg-brand text-white hover:bg-brand-dark disabled:hover:bg-brand;
+    }
+
+    .btn-editor-secondary {
+        @apply border-neutral-400 bg-white text-neutral-800 hover:bg-neutral-100 disabled:hover:bg-white;
+    }
+
     .btn-primary {
         @apply cursor-pointer rounded border border-brand bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-dark;
     }
@@ -299,8 +311,25 @@
         @apply border-green-300 bg-green-100 text-green-700 hover:bg-green-200 hover:text-green-800;
     }
 
+    .btn-icon-cancelled {
+        @apply border-neutral-400 bg-neutral-200 text-neutral-700 hover:bg-neutral-300 hover:text-neutral-900;
+    }
+
+    .invoice-row-cancelled td {
+        @apply text-neutral-500;
+    }
+
     .btn-icon-copy {
         @apply border-brand/40 bg-brand-light/60 text-brand hover:border-brand/60 hover:bg-brand-light hover:text-brand-dark;
+    }
+
+    .btn-icon-pdf {
+        @apply border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100 hover:text-red-800;
+    }
+
+    .btn-icon-disabled,
+    .btn-icon:disabled {
+        @apply cursor-not-allowed opacity-40 hover:bg-white hover:text-neutral-600;
     }
 
     .modal-close {
@@ -505,8 +534,16 @@
 }
 
 /* ===== Světlý / tmavý režim ===== */
-.dark {
-    color-scheme: dark;
+.dark .app-footer {
+    border-color: #334155;
+}
+
+.dark .app-footer a {
+    color: #2dd4bf;
+}
+
+.dark .app-footer a:hover {
+    color: #5eead4;
 }
 
 body,
@@ -706,6 +743,23 @@ body * {
 }
 .dark .btn-icon-resolved:hover { background-color: rgba(34, 197, 94, 0.28); color: #86efac; }
 
+.dark .btn-icon-cancelled {
+    border-color: #64748b;
+    background-color: rgba(100, 116, 139, 0.25);
+    color: #cbd5e1;
+}
+.dark .btn-icon-cancelled:hover {
+    background-color: rgba(100, 116, 139, 0.4);
+    color: #f1f5f9;
+}
+
+.dark .invoice-row-cancelled {
+    background-color: rgba(148, 163, 184, 0.08);
+}
+.dark .invoice-row-cancelled td {
+    color: #94a3b8;
+}
+
 .dark .btn-icon-copy {
     border-color: rgba(0, 181, 200, 0.45);
     background-color: rgba(0, 181, 200, 0.16);
@@ -714,6 +768,16 @@ body * {
 .dark .btn-icon-copy:hover {
     background-color: rgba(0, 181, 200, 0.26);
     color: #5eead4;
+}
+
+.dark .btn-icon-pdf {
+    border-color: rgba(248, 113, 113, 0.45);
+    background-color: rgba(248, 113, 113, 0.14);
+    color: #f87171;
+}
+.dark .btn-icon-pdf:hover {
+    background-color: rgba(248, 113, 113, 0.24);
+    color: #fca5a5;
 }
 
 .dark .filter-input,
