@@ -9,6 +9,7 @@ pg-scripts/.env
 web/data/invoices/*.json
 web/data/sablona.json
 web/data/parties.json
+web/data/import-from-csv.json
 desktop/data/invoices/*.json
 desktop/data/sablona.json
 desktop/data/parties.json
