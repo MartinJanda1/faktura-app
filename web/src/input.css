@@ -550,6 +550,14 @@
     border-color: #334155;
 }
 
+.dark .stats-kpi {
+    background-color: #1e293b;
+    box-shadow: none;
+}
+.dark .stats-kpi .text-neutral-900 {
+    color: #f1f5f9;
+}
+
 .dark .app-footer a {
     color: #2dd4bf;
 }

@@ -5,6 +5,17 @@ Všechny významné změny projektu **MJ Faktura** jsou dokumentovány v tomto s
 Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/),
 verze ze [Semantic Versioning](https://semver.org/lang/cs/).
 
+## [1.3.0] – 2026-07-24
+
+### Přidáno
+
+- Stránka **Statistiky** (`stats.html`) s grafy:
+  - sloupcový graf **obratu** (po letech / měsících / kvartálu)
+  - koláčový graf **podílu odběratelů**
+- KPI: počet faktur, obrat, hodiny, průměr na fakturu
+- Filtry: **rok**, **kvartál** nebo **měsíc**, odběratel, stav (+ paměť v `localStorage`)
+- Odkaz Statistiky v hlavičce seznamu a v patičce
+
 ## [1.2.0] – 2026-07-24
 
 ### Přidáno

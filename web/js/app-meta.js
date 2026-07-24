@@ -1,6 +1,6 @@
 const AppMeta = (() => {
   const NAME = "MJ Faktura";
-  const VERSION = "1.2.0";
+  const VERSION = "1.3.0";
   const YEAR = new Date().getFullYear();
 
   function mountVersionLabels(root = document) {
