@@ -1,6 +1,6 @@
 # MJ Faktura – správa faktur
 
-**Verze:** 1.1.0 — změny viz [CHANGELOG.md](CHANGELOG.md).
+**Verze:** 1.2.0 — změny viz [CHANGELOG.md](CHANGELOG.md).
 
 Projekt obsahuje dvě verze stejné aplikace:
 
@@ -42,7 +42,7 @@ cd web && npm run build:css
 cd ../desktop && npm run dist
 ```
 
-Výstup: **`desktop/dist/MJ-Faktura-1.1.0-portable.exe`** — není potřeba instalace, stačí spustit soubor.
+Výstup: **`desktop/dist/MJ-Faktura-1.2.0-portable.exe`** — není potřeba instalace, stačí spustit soubor.
 
 Instalační verze: `cd desktop && npm run dist:installer`
 
@@ -233,7 +233,7 @@ Stačí samotný objekt faktury v kořeni souboru (bez obálky `type` / `data`),
 ### Desktop na PC (bez Node.js)
 
 1. Sestav `.exe` (`npm run dist` ve složce `desktop/`)
-2. Zkopíruj `MJ-Faktura-1.1.0-portable.exe` kamkoli (USB, Plocha)
+2. Zkopíruj `MJ-Faktura-1.2.0-portable.exe` kamkoli (USB, Plocha)
 3. Spusť — data se ukládají do `%APPDATA%\faktura-app-desktop\data\`
 4. Záloha = zkopírovat celou složku `data\`
 

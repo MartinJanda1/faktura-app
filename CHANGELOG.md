@@ -5,6 +5,23 @@ Všechny významné změny projektu **MJ Faktura** jsou dokumentovány v tomto s
 Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/),
 verze ze [Semantic Versioning](https://semver.org/lang/cs/).
 
+## [1.2.0] – 2026-07-24
+
+### Přidáno
+
+- Paměť **filtrů a řazení** na seznamu faktur (`localStorage`) — po obnovení stránky zůstanou nastavené
+- **Jen ke čtení** u vyřízených faktur — nelze editovat; v seznamu ikona oka místo tužky
+- Skripty pro migraci starých faktur z CSV (`scripts/csv-to-invoices.js`) a doplnění adres odběratelů z ARES (`scripts/fill-customer-addresses-ares.js`)
+- Při CSV importu výpočet hodin ze sazby 500 Kč/h (celková částka beze změny)
+
+### Změněno
+
+- Robustnější práce s uloženými dodavateli/odběrateli (i „placatý“ tvar záznamu)
+
+### Opraveno
+
+- Pád při **Nová faktura** (`Cannot read properties of null (reading 'ico')`) při výpočtu číselné řady
+
 ## [1.1.0] – 2026-07-20
 
 ### Přidáno

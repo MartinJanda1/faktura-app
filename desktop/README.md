@@ -25,7 +25,7 @@ npm start
 Uživatel **nepotřebuje Node.js** — stačí spustitelný soubor.
 
 1. Sestav aplikaci (viz níže)
-2. Předej soubor **`dist/MJ-Faktura-1.1.0-portable.exe`**
+2. Předej soubor **`dist/MJ-Faktura-1.2.0-portable.exe`**
 3. Po prvním spuštění se data vytvoří automaticky
 
 ### Kde jsou data
@@ -54,9 +54,9 @@ cd ../web && npm run build:css
 cd ../desktop && npm run dist
 ```
 
-Výstup: **`desktop/dist/MJ-Faktura-1.1.0-portable.exe`**
+Výstup: **`desktop/dist/MJ-Faktura-1.2.0-portable.exe`**
 
-Instalační verze (NSIS): `npm run dist:installer` → `MJ-Faktura-1.1.0-setup.exe`
+Instalační verze (NSIS): `npm run dist:installer` → `MJ-Faktura-1.2.0-setup.exe`
 
 Z kořene projektu: `npm run dist:desktop`
 
