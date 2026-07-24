@@ -85,8 +85,21 @@ function createPartiesStorage({ dataRoot }) {
       (item) => item.id === profile.id || (ico && String(item.ico || item.supplier?.ico || "").replace(/\D/g, "") === ico)
     );
 
+    const existingSupplier = existing?.supplier || (existing
+      ? {
+          name: existing.name || "",
+          address: existing.address || "",
+          city: existing.city || "",
+          country: existing.country || "Česká republika",
+          ico: existing.ico || "",
+          email: existing.email || "",
+          phone: existing.phone || "",
+          vatNote: existing.vatNote || "",
+        }
+      : {});
+
     const supplier = {
-      ...(existing?.supplier || {}),
+      ...existingSupplier,
       ...(profile.supplier || {}),
       ico,
     };

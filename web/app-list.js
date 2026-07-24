@@ -8,8 +8,46 @@ let selectedIds = new Set();
 let visibleIds = [];
 
 const SORT_COLUMNS = ["number", "customer", "issue", "total"];
+const LIST_PREFS_KEY = "faktura-list-prefs";
+const STATUS_FILTERS = ["active", "resolved", "cancelled", "all"];
 
 let exportFileExt = "json";
+
+function loadListPrefs() {
+  try {
+    const raw = localStorage.getItem(LIST_PREFS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveListPrefs() {
+  if (!listFilters) return;
+  try {
+    const { customerFilter, dateFilter, statusFilter } = listFilters.getState();
+    localStorage.setItem(
+      LIST_PREFS_KEY,
+      JSON.stringify({
+        customerFilter,
+        dateFilter,
+        statusFilter,
+        sort: { column: sortState.column, direction: sortState.direction },
+      })
+    );
+  } catch {
+    // úložiště nemusí být dostupné
+  }
+}
+
+function applySortPrefs(prefs) {
+  const sort = prefs?.sort;
+  if (!sort || !SORT_COLUMNS.includes(sort.column)) return;
+  sortState.column = sort.column;
+  sortState.direction = sort.direction === "desc" ? "desc" : "asc";
+}
 
 async function updateStorageHint() {
   await updateExportImportUi();
@@ -318,6 +356,22 @@ function createFilterController(config) {
     },
     closeSuggestions,
     updateDateSelects,
+    hydrate(source) {
+      if (!source) return;
+      if (source.customerFilter) {
+        customerFilter = InvoiceFilters.cloneCustomerFilter(source.customerFilter);
+      }
+      if (source.dateFilter) {
+        dateFilter = InvoiceFilters.cloneDateFilter(source.dateFilter);
+      }
+      if (source.statusFilter && STATUS_FILTERS.includes(source.statusFilter)) {
+        statusFilter = source.statusFilter;
+      }
+    },
+    syncUi() {
+      syncInputsFromState();
+      if (els.status) els.status.value = statusFilter;
+    },
     syncFrom(source) {
       customerFilter = InvoiceFilters.cloneCustomerFilter(source.customerFilter);
       dateFilter = InvoiceFilters.cloneDateFilter(source.dateFilter);
@@ -463,6 +517,7 @@ function handleSortClick(column) {
 
   updateSortHeaderUi();
   renderInvoiceRows();
+  saveListPrefs();
 }
 
 function initSort() {
@@ -539,8 +594,8 @@ function renderInvoiceRows() {
           </td>
           <td class="px-5 py-4">
             <div class="flex justify-end gap-2">
-              <a href="invoice.html?id=${encodeURIComponent(summary.id)}" class="btn-icon" title="Otevřít" aria-label="Otevřít fakturu">
-                ${MdiIcons.svg("pencilOutline")}
+              <a href="invoice.html?id=${encodeURIComponent(summary.id)}" class="btn-icon" title="${resolved ? "Zobrazit (jen ke čtení)" : "Otevřít"}" aria-label="${resolved ? "Zobrazit fakturu jen ke čtení" : "Otevřít fakturu"}">
+                ${MdiIcons.svg(resolved ? "eyeOutline" : "pencilOutline")}
               </a>
               <a href="invoice.html?copy=${encodeURIComponent(summary.id)}" class="btn-icon btn-icon-copy ${cancelled ? "btn-icon-disabled pointer-events-none" : ""}" title="Kopírovat fakturu" aria-label="Kopírovat fakturu" ${cancelled ? 'tabindex="-1" aria-disabled="true"' : ""}>
                 ${MdiIcons.svg("fileDocumentMultipleOutline")}
@@ -707,7 +762,9 @@ function updatePartyPreview(type) {
   aresBox?.classList.toggle("hidden", selection.id !== PARTY_ARES);
 
   if (selection.record) {
-    const data = isSupplier ? selection.record.supplier : selection.record.customer;
+    const data = isSupplier
+      ? FakturaParties.supplierToInvoiceFields(selection.record).supplier
+      : FakturaParties.customerToInvoiceFields(selection.record).customer;
     preview.textContent = [data?.name, data?.address, data?.city, data?.ico ? `IČ ${data.ico}` : ""]
       .filter(Boolean)
       .join(" · ");
@@ -849,13 +906,15 @@ function getSelectedSupplierForNumbering() {
   const select = document.getElementById("new-supplier-select");
   const value = select?.value || "";
   if (!value || value === PARTY_ARES) {
-    if (value === PARTY_ARES && supplierSelection.record?.supplier) {
-      return supplierSelection.record.supplier;
+    if (value === PARTY_ARES) {
+      const fields = FakturaParties.supplierToInvoiceFields(supplierSelection.record);
+      return fields.supplier || null;
     }
     return null;
   }
   const record = findPartyRecord("supplier", value);
-  return record?.supplier || null;
+  const fields = FakturaParties.supplierToInvoiceFields(record);
+  return fields.supplier || null;
 }
 
 function updateNumberPreviewFromSetup() {
@@ -959,7 +1018,8 @@ async function confirmNewInvoice() {
 
     if (supplierRecord) {
       Object.assign(setup, FakturaParties.supplierToInvoiceFields(supplierRecord));
-      setup.payment = { ...setup.payment, ...supplierRecord.payment, method: paymentMethod };
+      const paymentFromSupplier = FakturaParties.supplierToInvoiceFields(supplierRecord).payment || {};
+      setup.payment = { ...setup.payment, ...paymentFromSupplier, method: paymentMethod };
     }
 
     if (customerRecord) {
@@ -967,7 +1027,9 @@ async function confirmNewInvoice() {
     }
 
     const invoices = await FakturaStorage.readInvoices();
-    const supplier = supplierRecord?.supplier || getSelectedSupplierForNumbering();
+    const supplier =
+      FakturaParties.supplierToInvoiceFields(supplierRecord).supplier ||
+      getSelectedSupplierForNumbering();
     const setupVisible = !document.getElementById("new-invoice-number-setup")?.classList.contains("hidden");
     let startNumber;
     if (setupVisible) {
@@ -1236,7 +1298,7 @@ async function renderInvoiceList() {
 
     emptyState.classList.add("hidden");
     filtersBar.classList.remove("hidden");
-    listFilters.updateDateSelects();
+    listFilters.syncUi();
     updateListFilterCount();
     renderInvoiceRows();
   } catch (err) {
@@ -1492,6 +1554,8 @@ function initImport() {
 }
 
 function initFilters() {
+  const prefs = loadListPrefs();
+
   listFilters = createFilterController({
     ids: {
       customer: "filter-customer",
@@ -1505,10 +1569,14 @@ function initFilters() {
     },
     defaultStatus: "active",
     onChange: () => {
+      saveListPrefs();
       updateListFilterCount();
       renderInvoiceRows();
     },
   });
+
+  listFilters.hydrate(prefs);
+  applySortPrefs(prefs);
 
   exportFilters = createFilterController({
     ids: {

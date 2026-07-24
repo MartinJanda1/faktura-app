@@ -19,7 +19,10 @@
   <div id="invoice-root" class="no-print mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-3">
     <a href="index.html" class="text-sm text-brand hover:text-brand-dark hover:underline">← Zpět na seznam</a>
     <div class="flex flex-wrap items-center justify-end gap-3">
-      <label class="flex items-center gap-2 text-sm text-neutral-600">
+      <p id="readonly-banner" class="hidden rounded border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800">
+        Vyřízená faktura — pouze ke čtení
+      </p>
+      <label id="layout-select-wrap" class="flex items-center gap-2 text-sm text-neutral-600">
         <span>Vzhled:</span>
         <select id="layout-select" class="cursor-pointer rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-900">
           <option value="classic">Klasická</option>

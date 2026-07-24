@@ -12,10 +12,11 @@ const InvoiceNumbering = (() => {
     return n;
   }
 
-  function partyKey(party = {}) {
-    const ico = String(party.ico || "").replace(/\D/g, "");
+  function partyKey(party) {
+    const p = party || {};
+    const ico = String(p.ico || "").replace(/\D/g, "");
     if (ico) return `ico:${ico}`;
-    const name = String(party.name || "")
+    const name = String(p.name || "")
       .trim()
       .toLowerCase()
       .normalize("NFD")

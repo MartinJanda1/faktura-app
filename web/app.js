@@ -84,11 +84,59 @@ function rowHasContent(row) {
 }
 
 function updateRowControls() {
+  const readOnly = isEditorReadOnly();
   document.querySelectorAll(".item-row").forEach((row) => {
     const btn = row.querySelector(".btn-remove");
     if (!btn) return;
+    if (readOnly) {
+      btn.classList.add("hidden");
+      return;
+    }
     btn.classList.toggle("hidden", !rowHasContent(row));
   });
+}
+
+function isEditorReadOnly() {
+  return document.getElementById("invoice-root")?.dataset.readOnly === "1";
+}
+
+function setEditorReadOnly(enabled) {
+  const root = document.getElementById("invoice-root");
+  const invoice = document.getElementById("invoice");
+  const banner = document.getElementById("readonly-banner");
+  const layoutSelect = document.getElementById("layout-select");
+  const btnSave = document.getElementById("btn-save");
+  const btnAddRow = document.getElementById("btn-add-row");
+
+  if (root) root.dataset.readOnly = enabled ? "1" : "";
+  root?.classList.toggle("is-readonly", enabled);
+  invoice?.classList.toggle("invoice-readonly", enabled);
+  banner?.classList.toggle("hidden", !enabled);
+
+  invoice?.querySelectorAll("input, textarea, select").forEach((el) => {
+    if (el.tagName === "SELECT") {
+      el.disabled = enabled;
+    } else {
+      el.readOnly = enabled;
+    }
+  });
+
+  if (layoutSelect) layoutSelect.disabled = enabled;
+  if (btnSave) {
+    btnSave.hidden = enabled;
+    if (enabled) btnSave.disabled = true;
+  }
+  if (btnAddRow) {
+    btnAddRow.hidden = enabled;
+    btnAddRow.disabled = enabled;
+  }
+
+  document.querySelectorAll(".col-row-ctl").forEach((cell) => {
+    cell.classList.toggle("hidden", enabled);
+  });
+
+  updateRowControls();
+  updateEditorActionButtons();
 }
 
 function ensureMinOneRow() {
@@ -108,6 +156,7 @@ function removeItemRow(row) {
 let rowPendingRemoval = null;
 
 function openRemoveModal(row) {
+  if (isEditorReadOnly()) return;
   rowPendingRemoval = row;
   const desc = row.querySelector(".desc")?.value.trim();
   const textEl = document.getElementById("remove-modal-text");
@@ -532,6 +581,17 @@ function updateEditorActionButtons() {
   const btnPdf = document.getElementById("btn-pdf");
   if (!btnSave || !btnPdf) return;
 
+  if (isEditorReadOnly()) {
+    btnSave.hidden = true;
+    btnSave.disabled = true;
+    btnPdf.disabled = !isInvoicePersisted();
+    setEditorButtonStyle(btnSave, false);
+    setEditorButtonStyle(btnPdf, !btnPdf.disabled);
+    return;
+  }
+
+  btnSave.hidden = false;
+
   const persisted = isInvoicePersisted();
   const dirty = isEditorDirty();
   const canSave = !persisted || dirty;
@@ -596,7 +656,10 @@ async function validateInvoiceNumberOrToast() {
 
 async function saveInvoice() {
   const btn = document.getElementById("btn-save");
-  if (btn.disabled) return;
+  if (btn.disabled || btn.hidden || isEditorReadOnly()) {
+    if (isEditorReadOnly()) showToast("Vyřízenou fakturu nelze upravovat.", "error");
+    return;
+  }
 
   if (!(await validateInvoiceNumberOrToast())) return;
 
@@ -715,7 +778,11 @@ async function loadInvoiceFromParams() {
         root.dataset.resolved = invoice.resolved ? "1" : "";
         root.dataset.cancelled = invoice.cancelled ? "1" : "";
       }
-      document.title = `MJ Faktura – ${invoice.invoiceNumber || invoice.id}`;
+      const readOnly = Boolean(invoice.resolved) && !invoice.cancelled;
+      setEditorReadOnly(readOnly);
+      document.title = readOnly
+        ? `MJ Faktura – ${invoice.invoiceNumber || invoice.id} (ke čtení)`
+        : `MJ Faktura – ${invoice.invoiceNumber || invoice.id}`;
       calculateGrandTotal();
       PaymentQr.updatePaymentQr();
       return;
@@ -736,6 +803,7 @@ async function loadInvoiceFromParams() {
         delete root.dataset.resolved;
         delete root.dataset.cancelled;
       }
+      setEditorReadOnly(false);
       document.title = `MJ Faktura – kopie ${source.invoiceNumber || copyId}`;
       calculateGrandTotal();
       PaymentQr.updatePaymentQr();
@@ -758,6 +826,7 @@ async function loadInvoiceFromParams() {
     invoice = applied.invoice;
 
     InvoiceModel.applyToForm(invoice, { rebuildRows: rebuildItemRows });
+    setEditorReadOnly(false);
 
     if (applied.setup) {
       const root = document.getElementById("invoice-root");
@@ -834,6 +903,7 @@ async function init() {
   });
 
   document.getElementById("btn-add-row").addEventListener("click", () => {
+    if (isEditorReadOnly()) return;
     createItemRow();
     markEditorDirty();
   });

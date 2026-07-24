@@ -23,8 +23,66 @@ const FakturaParties = (() => {
     return res.json();
   }
 
+  function normalizeSupplierRecord(record) {
+    if (!record) return null;
+    if (record.supplier && typeof record.supplier === "object") {
+      return {
+        ...record,
+        ico: record.ico || record.supplier.ico || "",
+        payment: record.payment || {},
+      };
+    }
+    return {
+      id: record.id,
+      ico: record.ico || "",
+      label: record.label || "",
+      savedAt: record.savedAt,
+      updatedAt: record.updatedAt,
+      supplier: {
+        name: record.name || "",
+        address: record.address || "",
+        city: record.city || "",
+        country: record.country || "Česká republika",
+        ico: record.ico || "",
+        email: record.email || "",
+        phone: record.phone || "",
+        vatNote: record.vatNote || "",
+      },
+      payment: record.payment || {},
+    };
+  }
+
+  function normalizeCustomerRecord(record) {
+    if (!record) return null;
+    if (record.customer && typeof record.customer === "object") {
+      return {
+        ...record,
+        ico: record.ico || record.customer.ico || "",
+      };
+    }
+    return {
+      id: record.id,
+      ico: record.ico || "",
+      label: record.label || "",
+      savedAt: record.savedAt,
+      updatedAt: record.updatedAt,
+      customer: {
+        name: record.name || "",
+        address: record.address || "",
+        city: record.city || "",
+        country: record.country || "Česká republika",
+        ico: record.ico || "",
+        dic: record.dic || "",
+      },
+    };
+  }
+
   async function listParties() {
-    return apiFetch("/parties");
+    const data = await apiFetch("/parties");
+    return {
+      suppliers: (data.suppliers || []).map(normalizeSupplierRecord).filter(Boolean),
+      customers: (data.customers || []).map(normalizeCustomerRecord).filter(Boolean),
+    };
   }
 
   async function lookupAres(ico) {
@@ -84,23 +142,25 @@ const FakturaParties = (() => {
   }
 
   function supplierToInvoiceFields(record) {
-    if (!record) return {};
+    const normalized = normalizeSupplierRecord(record);
+    if (!normalized) return {};
     return {
-      supplierPartyId: record.id,
-      supplier: { ...record.supplier },
+      supplierPartyId: normalized.id,
+      supplier: { ...(normalized.supplier || {}) },
       payment: {
         constantSymbol: BankUtils.DEFAULT_CONSTANT_SYMBOL,
         method: "Převodem",
-        ...record.payment,
+        ...(normalized.payment || {}),
       },
     };
   }
 
   function customerToInvoiceFields(record) {
-    if (!record) return {};
+    const normalized = normalizeCustomerRecord(record);
+    if (!normalized) return {};
     return {
-      customerPartyId: record.id,
-      customer: { ...record.customer },
+      customerPartyId: normalized.id,
+      customer: { ...(normalized.customer || {}) },
     };
   }
 

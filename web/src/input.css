@@ -283,6 +283,18 @@
         @apply border-neutral-400 bg-white text-neutral-800 hover:bg-neutral-100 disabled:hover:bg-white;
     }
 
+    .invoice-readonly input,
+    .invoice-readonly textarea {
+        cursor: default;
+    }
+
+    .invoice-readonly select:disabled {
+        cursor: default;
+        opacity: 1;
+        color: inherit;
+        -webkit-text-fill-color: inherit;
+    }
+
     .btn-primary {
         @apply cursor-pointer rounded border border-brand bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-dark;
     }
