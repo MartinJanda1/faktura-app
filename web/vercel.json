@@ -7,8 +7,7 @@
       "config": {
         "includeFiles": [
           "*.html",
-          "app.js",
-          "app-list.js",
+          "*.js",
           "css/**",
           "js/**"
         ]
