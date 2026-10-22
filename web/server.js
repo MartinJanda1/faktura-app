@@ -226,9 +226,10 @@ function createFakturaServer(options = {}) {
     }
   }
 
-  const server = http.createServer(async (req, res) => {
+  async function handleRequest(req, res) {
     try {
-      if (req.url.startsWith("/api/")) {
+      const url = req.url || "/";
+      if (url.startsWith("/api/") || url === "/api") {
         await handleApi(req, res);
         return;
       }
@@ -237,10 +238,14 @@ function createFakturaServer(options = {}) {
       console.error(err);
       sendError(res, 500, "Interní chyba serveru.");
     }
-  });
+  }
+
+  const server = http.createServer(handleRequest);
 
   return {
     server,
+    handleRequest,
+    ensureReady: initStorage,
     get port() {
       return listenPort;
     },

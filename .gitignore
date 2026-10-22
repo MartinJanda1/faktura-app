@@ -15,3 +15,5 @@ desktop/data/sablona.json
 desktop/data/parties.json
 
 .env
+.vercel
+.env*
